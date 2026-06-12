@@ -1,0 +1,115 @@
+---
+import Layout from '../../layouts/Layout.astro'
+---
+<Layout>
+  <div class="animate-fade-up">
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-9">
+      <div>
+        <span class="page-label">Agenda</span>
+        <h1 class="page-title">Turnos</h1>
+      </div>
+      <a href="/turnos/nuevo" class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="7" y1="1" x2="7" y2="13"/>
+          <line x1="1" y1="7" x2="13" y2="7"/>
+        </svg>
+        Nuevo turno
+      </a>
+    </div>
+
+    <form id="filters" class="flex flex-wrap gap-3 items-end mb-8">
+      <div class="form-group">
+        <span class="form-label">Fecha</span>
+        <input type="date" id="ff" class="form-input" style="width:auto;min-width:150px;padding:9px 12px;">
+      </div>
+      <div class="form-group">
+        <span class="form-label">Barbero</span>
+        <select id="fb" class="form-select" style="width:auto;min-width:150px;padding:9px 28px 9px 12px;"><option value="">Todos</option></select>
+      </div>
+      <div class="form-group">
+        <span class="form-label">Estado</span>
+        <select id="fe" class="form-select" style="width:auto;min-width:150px;padding:9px 28px 9px 12px;">
+          <option value="">Todos</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="confirmado">Confirmado</option>
+          <option value="completado">Completado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-secondary" style="padding:9px 16px;">Filtrar</button>
+      <a href="/turnos" class="btn-ghost" style="padding:9px 12px;">Limpiar</a>
+    </form>
+
+    <div id="table"><div class="loading-state">Cargando...</div></div>
+  </div>
+</Layout>
+<script>
+  import { api } from "../../lib/api"
+  const fmt = (n) => '$' + n.toLocaleString('es-AR')
+  const ds = (d) => `${d.slice(8,10)}/${d.slice(5,7)}/${d.slice(0,4)} ${d.slice(11,16)}h`
+
+  async function loadBarberos() {
+    const rows = await api.barberos.list()
+    ;(document.getElementById('fb')).innerHTML = '<option value="">Todos</option>' + rows.map(b => `<option value="${b.id}">${b.nombre} ${b.apellido}</option>`).join('')
+  }
+
+  async function load(params) {
+    const c = document.getElementById("table")
+    try {
+      const rows = await api.turnos.list(params || '')
+      if (!rows.length) {
+        c.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="13.5" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6.5" y1="1.5" x2="6.5" y2="5"/><line x1="13.5" y1="1.5" x2="13.5" y2="5"/></svg></div>No hay turnos con los filtros seleccionados.</div></div>'
+        return
+      }
+      c.innerHTML = rows.map((r, i) =>
+        `<div class="card-row animate-fade-up" style="animation-delay:${i*0.02}s;">
+          <div class="avatar">${r.cliente.charAt(0).toUpperCase()}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="font-semibold text-[15px]" style="color:var(--color-text);">${ds(r.fecha_hora)}</span>
+              <span style="color:var(--color-text-tertiary);font-size:13px;">·</span>
+              <span style="color:var(--color-text-secondary);font-size:14px;">${r.cliente}</span>
+              <span style="color:var(--color-text-tertiary);font-size:13px;">·</span>
+              <span style="color:var(--color-text-tertiary);font-size:13px;">${r.barbero}</span>
+              <span style="color:var(--color-text-tertiary);font-size:13px;">·</span>
+              <span style="color:var(--color-text-tertiary);font-size:13px;">${r.servicio}</span>
+            </div>
+            <div class="flex items-center gap-3 mt-0.5">
+              <span class="font-semibold text-sm" style="color:var(--color-accent);">${fmt(r.precio)}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <select data-id="${r.id}" class="status-select badge-${r.estado}" onchange="window.cambiarEstado(this.dataset.id,this.value)">
+              ${['pendiente','confirmado','completado','cancelado'].map(e => `<option value="${e}" ${r.estado===e?'selected':''}>${e.charAt(0).toUpperCase()+e.slice(1)}</option>`).join('')}
+            </select>
+            <a href="/turnos/${r.id}" class="btn-ghost">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10.5 1.5l2 2L5 11H3V9l7.5-7.5z"/></svg>
+            </a>
+            <button data-id="${r.id}" class="btn-danger">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>
+            </button>
+          </div>
+        </div>`
+      ).join('')
+      document.querySelectorAll('.btn-danger').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar este turno?')) return
+        try { await api.turnos.delete(Number((b).dataset.id)); load(getP()) }
+        catch (e) { alert(e.message) }
+      }))
+    } catch (e) { c.innerHTML = `<div class="card"><div class="error-state">Error: ${e.message}</div></div>` }
+  }
+
+  function getP() {
+    const p = new URLSearchParams()
+    const ff=(document.getElementById('ff')).value
+    const fb=(document.getElementById('fb')).value
+    const fe=(document.getElementById('fe')).value
+    if(ff) p.set('fecha',ff); if(fb) p.set('barbero_id',fb); if(fe) p.set('estado',fe)
+    const q=p.toString(); return q?'?'+q:''
+  }
+  ;window.cambiarEstado = async (id, estado) => {
+    try{await api.turnos.cambiarEstado(id,estado);load(getP())}catch(e){alert(e.message)}
+  }
+  document.getElementById("filters").addEventListener('submit',e=>{e.preventDefault();load(getP())})
+  loadBarberos();load()
+</script>

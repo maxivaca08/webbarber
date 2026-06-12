@@ -1,0 +1,104 @@
+---
+import Layout from '../layouts/Layout.astro'
+import CalendarWidget from '../components/CalendarWidget.astro'
+---
+
+<Layout>
+  <div class="animate-fade-up">
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-9">
+      <div>
+        <span class="page-label">Panel de control</span>
+        <h1 class="page-title">Dashboard</h1>
+      </div>
+      <a href="/turnos/nuevo" class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="7" y1="1" x2="7" y2="13"/>
+          <line x1="1" y1="7" x2="13" y2="7"/>
+        </svg>
+        Nuevo turno
+      </a>
+    </div>
+
+    <div id="stats-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10"></div>
+
+    <div id="timeline-section" class="mb-10">
+      <div class="section-header">
+        <h3>Turnos de hoy</h3>
+        <div class="section-header-line"></div>
+        <a href="/turnos" class="btn-ghost">Ver todos</a>
+      </div>
+      <div id="today-body" class="loading-state">Cargando...</div>
+    </div>
+
+    <div class="animate-fade-up s4">
+      <div class="section-header">
+        <h3>Calendario</h3>
+        <div class="section-header-line"></div>
+      </div>
+      <div class="card p-5">
+        <CalendarWidget />
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { api } from "../lib/api"
+
+  async function load() {
+    try {
+      const data = await api.stats.get()
+      const { stats, turnos_hoy } = data
+
+      const grid = document.getElementById('stats-grid')
+      grid.innerHTML = [
+        { value: stats.total_clientes, label: 'Clientes' },
+        { value: stats.total_barberos, label: 'Barberos activos' },
+        { value: stats.turnos_hoy, label: 'Turnos hoy' },
+        { value: stats.turnos_pendientes, label: 'Pendientes' },
+      ].map((s, i) =>
+        `<div class="stat-card animate-fade-up s${i + 1}">
+          <div class="stat-bar"></div>
+          <div class="stat-value">${s.value}</div>
+          <div class="stat-label">${s.label}</div>
+        </div>`
+      ).join('')
+
+      const body = document.getElementById('today-body')
+      if (turnos_hoy.length === 0) {
+        body.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="13.5" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6.5" y1="1.5" x2="6.5" y2="5"/><line x1="13.5" y1="1.5" x2="13.5" y2="5"/></svg></div>No hay turnos agendados para hoy.</div></div>'
+        return
+      }
+
+      const sorted = [...turnos_hoy].sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora))
+      body.innerHTML = '<div class="timeline">' +
+        sorted.map((t, i) =>
+          `<div class="timeline-item ${t.estado} animate-fade-up" style="animation-delay: ${i * 0.05}s;">
+            <div class="timeline-time">${t.fecha_hora.slice(11, 16)}</div>
+            <div class="timeline-content">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2.5 flex-wrap">
+                    <span class="font-semibold text-[15px]" style="color: var(--color-text);">${t.cliente}</span>
+                    <span class="text-[13px]" style="color: var(--color-text-tertiary);">·</span>
+                    <span class="text-[13px]" style="color: var(--color-text-secondary);">${t.barbero}</span>
+                  </div>
+                  <div class="text-[13px] mt-0.5" style="color: var(--color-text-tertiary);">${t.servicio}</div>
+                </div>
+                <div class="flex items-center gap-2.5 shrink-0">
+                  <span class="badge badge-${t.estado}">${t.estado.charAt(0).toUpperCase() + t.estado.slice(1)}</span>
+                  <a href="/turnos/${t.id}" class="btn-ghost">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10.5 1.5l2 2L5 11H3V9l7.5-7.5z"/></svg>
+                    Editar
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>`
+        ).join('') + '</div>'
+    } catch {
+      document.getElementById('today-body').innerHTML = '<div class="card"><div class="error-state">Error al cargar. ¿El backend está corriendo?</div></div>'
+    }
+  }
+  load()
+</script>

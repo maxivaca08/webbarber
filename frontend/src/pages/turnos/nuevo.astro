@@ -1,0 +1,85 @@
+---
+import Layout from '../../layouts/Layout.astro'
+---
+<Layout>
+  <div class="animate-fade-up" style="max-width: 640px;">
+    <div class="mb-8">
+      <a href="/turnos" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3L6 7l4.5 4"/></svg>
+        Volver
+      </a>
+      <h1 class="page-title mt-2">Nuevo Turno</h1>
+    </div>
+    <form id="form" class="card p-6 md:p-7 space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <span class="form-label">Cliente *</span>
+          <select name="cliente_id" id="sc" class="form-select" required><option value="">Seleccionar...</option></select>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Barbero *</span>
+          <select name="barbero_id" id="sb" class="form-select" required><option value="">Seleccionar...</option></select>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Servicio *</span>
+          <select name="servicio_id" id="ss" class="form-select" required><option value="">Seleccionar...</option></select>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Fecha y hora *</span>
+          <input type="datetime-local" name="fecha_hora" id="fh" class="form-input" required>
+        </div>
+        <div class="form-group md:col-span-2">
+          <span class="form-label">Notas</span>
+          <textarea name="notas" class="form-textarea" rows="3" placeholder="Observaciones, pedidos especiales..."></textarea>
+        </div>
+      </div>
+
+      <div id="resumen" class="hidden flex items-center gap-5 px-4 py-3 rounded-[8px]" style="background:var(--color-accent-subtle);border:1px solid rgba(212,135,74,0.12);">
+        <div class="flex items-center gap-2 text-sm" style="color:var(--color-text-secondary);">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="7.5" cy="7.5" r="6.5"/><path d="M7.5 4v4l3 1.5"/></svg>
+          <span>Duración: <strong id="rd" style="color:var(--color-text);">—</strong></span>
+        </div>
+        <div class="flex items-center gap-2 text-sm" style="color:var(--color-text-secondary);">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 11.5L7.5 2l4.5 9.5H3z"/><line x1="7.5" y1="6" x2="7.5" y2="9"/><circle cx="7.5" cy="10.5" r="0.5" fill="currentColor"/></svg>
+          <span>Precio: <strong id="rp" style="color:var(--color-accent);">—</strong></span>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn-primary">Guardar turno</button>
+        <a href="/turnos" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</Layout>
+<script>
+  import { api } from "../../lib/api"
+  async function load() {
+    const [clientes, barberos, servicios] = await Promise.all([api.clientes.list(), api.barberos.list(), api.servicios.list()])
+    const sc = document.getElementById('sc')
+    sc.innerHTML = '<option value="">Seleccionar cliente...</option>' + clientes.map(c => `<option value="${c.id}">${c.nombre} ${c.apellido}</option>`).join('')
+    const sb = document.getElementById('sb')
+    sb.innerHTML = '<option value="">Seleccionar barbero...</option>' + barberos.filter(b => b.activo).map(b => `<option value="${b.id}">${b.nombre} ${b.apellido}</option>`).join('')
+    const ss = document.getElementById('ss')
+    ss.innerHTML = '<option value="">Seleccionar servicio...</option>' + servicios.map(s => `<option value="${s.id}" data-d="${s.duracion_minutos}" data-p="${s.precio}">${s.nombre} — ${s.duracion_minutos}min — $${s.precio.toLocaleString('es-AR')}</option>`).join('')
+    ss.addEventListener('change', () => {
+      const opt = ss.options[ss.selectedIndex]; const r = document.getElementById('resumen')
+      if (opt.value === '') { r.classList.add('hidden'); return }
+      document.getElementById('rd').textContent = opt.dataset.d + ' min'
+      document.getElementById('rp').textContent = '$' + Number(opt.dataset.p).toLocaleString('es-AR')
+      r.classList.remove('hidden')
+    })
+    const p = new URLSearchParams(window.location.search)
+    if (p.has('fecha')) (document.getElementById('fh')).value = p.get('fecha')
+  }
+  load()
+  document.getElementById('form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries())
+    data.cliente_id = Number(data.cliente_id); data.barbero_id = Number(data.barbero_id); data.servicio_id = Number(data.servicio_id)
+    try { await api.turnos.create(data); window.location.href = '/turnos' }
+    catch (e) { alert(e.message) }
+  })
+</script>

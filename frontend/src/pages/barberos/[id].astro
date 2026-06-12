@@ -1,0 +1,61 @@
+---
+import Layout from '../../layouts/Layout.astro'
+export const prerender = false
+const { id } = Astro.params
+---
+<Layout>
+  <div class="animate-fade-up" style="max-width: 640px;">
+    <div class="mb-8">
+      <a href="/barberos" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3L6 7l4.5 4"/></svg>
+        Volver
+      </a>
+      <h1 class="page-title mt-2">Editar Barbero</h1>
+    </div>
+    <form id="form" class="card p-6 md:p-7 space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <span class="form-label">Nombre *</span>
+          <input type="text" name="nombre" id="nombre" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Apellido *</span>
+          <input type="text" name="apellido" id="apellido" class="form-input" required>
+        </div>
+        <div class="form-group md:col-span-2">
+          <span class="form-label">Especialidad</span>
+          <input type="text" name="especialidad" id="especialidad" class="form-input">
+        </div>
+        <div class="form-group md:col-span-2">
+          <label class="flex items-center gap-2.5 cursor-pointer" style="text-transform:none;letter-spacing:0;">
+            <input type="checkbox" name="activo" id="activo" value="true" class="w-4 h-4 rounded" style="accent-color:var(--color-accent);">
+            <span class="text-sm font-medium" style="color:var(--color-text);">Barbero activo</span>
+          </label>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn-primary">Guardar cambios</button>
+        <a href="/barberos" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</Layout>
+<script>
+  import { api } from "../../lib/api"
+  const bid = new URL(window.location.href).pathname.split('/').pop()
+  api.barberos.get(Number(bid)).then(b => {
+    ;(document.getElementById('nombre')).value = b.nombre
+    ;(document.getElementById('apellido')).value = b.apellido
+    ;(document.getElementById('especialidad')).value = b.especialidad || ''
+    ;(document.getElementById('activo')).checked = !!b.activo
+  }).catch(e => alert('Error: ' + e.message))
+  document.getElementById("form").addEventListener('submit', async e => {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const data = Object.fromEntries(fd.entries())
+    data.activo = fd.has('activo')
+    try { await api.barberos.update(Number(bid), data); window.location.href = '/barberos' }
+    catch (e) { alert(e.message) }
+  })
+</script>

@@ -1,0 +1,34 @@
+---
+const { height = 560 } = Astro.props
+---
+
+<div id="calendar" style="min-height: {height}px"></div>
+
+<script>
+  import { Calendar } from '@fullcalendar/core'
+  import dayGridPlugin from '@fullcalendar/daygrid'
+  import timeGridPlugin from '@fullcalendar/timegrid'
+  import interactionPlugin from '@fullcalendar/interaction'
+  import esLocale from '@fullcalendar/core/locales/es'
+  import { API_BASE } from '../lib/api'
+
+  const el = document.getElementById('calendar')
+  if (el) {
+    new Calendar(el, {
+      plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
+      initialView: 'timeGridWeek',
+      locale: esLocale,
+      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+      slotMinTime: '08:00:00',
+      slotMaxTime: '21:00:00',
+      height: 'auto',
+      contentHeight: 480,
+      events: `${API_BASE}/turnos/calendario`,
+      eventClick: info => { window.location.href = `/turnos/${info.event.id}` },
+      selectable: true,
+      select: info => {
+        window.location.href = `/turnos/nuevo?${new URLSearchParams({ fecha: info.startStr.slice(0, 16) })}`
+      },
+    }).render()
+  }
+</script>
