@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}BarberApp{% endblock %} — Gestión de Turnos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">✂️</div>
+    <div>
+      <h1>BarberApp</h1>
+      <span>Gestión de turnos</span>
+    </div>
+  </div>
+  <nav>
+    <a href="{{ url_for('index') }}" class="{% if request.endpoint=='index' %}active{% endif %}">
+      <span class="nav-icon">🏠</span>
+      <span>Dashboard</span>
+    </a>
+    <a href="{{ url_for('turnos') }}" class="{% if 'turno' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">📅</span>
+      <span>Turnos</span>
+    </a>
+    <a href="{{ url_for('clientes') }}" class="{% if 'cliente' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">👤</span>
+      <span>Clientes</span>
+    </a>
+    <a href="{{ url_for('barberos') }}" class="{% if 'barbero' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">💈</span>
+      <span>Barberos</span>
+    </a>
+    <a href="{{ url_for('servicios') }}" class="{% if 'servicio' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">📋</span>
+      <span>Servicios</span>
+    </a>
+  </nav>
+</aside>
+
+<main class="main">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat == 'success' %}✅{% elif cat == 'info' %}ℹ️{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

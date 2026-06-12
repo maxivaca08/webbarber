@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Barberos{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>💈 Barberos</h2>
+  <a href="{{ url_for('nuevo_barbero') }}" class="btn btn-primary">＋ Nuevo barbero</a>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>#</th><th>Nombre</th><th>Especialidad</th><th>Estado</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for b in barberos %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ b.id }}</td>
+        <td><strong>{{ b.nombre }} {{ b.apellido }}</strong></td>
+        <td>{{ b.especialidad or '—' }}</td>
+        <td>
+          {% if b.activo %}
+            <span class="badge badge-completado">Activo</span>
+          {% else %}
+            <span class="badge badge-cancelado">Inactivo</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a href="{{ url_for('editar_barbero', id=b.id) }}" class="btn btn-ghost btn-sm">✏️ Editar</a>
+          <form method="post" action="{{ url_for('eliminar_barbero', id=b.id) }}"
+                onsubmit="return confirm('¿Eliminar barbero?')">
+            <button class="btn btn-danger btn-sm">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">
+        No hay barberos registrados.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

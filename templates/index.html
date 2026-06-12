@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block head %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Dashboard</h2>
+  <a href="{{ url_for('nuevo_turno') }}" class="btn btn-primary">＋ Nuevo turno</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">👤</div>
+    <div class="stat-info">
+      <p>Clientes</p>
+      <h3>{{ stats.total_clientes }}</h3>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">💈</div>
+    <div class="stat-info">
+      <p>Barberos activos</p>
+      <h3>{{ stats.total_barberos }}</h3>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📅</div>
+    <div class="stat-info">
+      <p>Turnos hoy</p>
+      <h3>{{ stats.turnos_hoy }}</h3>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-info">
+      <p>Pendientes</p>
+      <h3>{{ stats.turnos_pendientes }}</h3>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    📅 Turnos de hoy
+    <a href="{{ url_for('turnos') }}" class="btn btn-ghost btn-sm">Ver todos</a>
+  </div>
+  {% if turnos_hoy %}
+  <table>
+    <thead>
+      <tr>
+        <th>Hora</th><th>Cliente</th><th>Barbero</th><th>Servicio</th><th>Estado</th><th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in turnos_hoy %}
+      <tr>
+        <td><strong>{{ t.fecha_hora[11:16] }}</strong></td>
+        <td>{{ t.cliente }}</td>
+        <td>{{ t.barbero }}</td>
+        <td>{{ t.servicio }}</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+        <td>
+          <a href="{{ url_for('editar_turno', id=t.id) }}" class="btn btn-ghost btn-sm">Editar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:32px;text-align:center;color:var(--text-muted);">
+    No hay turnos agendados para hoy.
+  </div>
+  {% endif %}
+</div>
+
+<div id="calendar"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    initialView: 'timeGridWeek',
+    locale: 'es',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay'
+    },
+    slotMinTime: '08:00:00',
+    slotMaxTime: '21:00:00',
+    height: 600,
+    events: '/api/turnos',
+    eventClick: function(info) {
+      window.location.href = '/turnos/' + info.event.id + '/editar';
+    }
+  });
+  cal.render();
+});
+</script>
+{% endblock %}

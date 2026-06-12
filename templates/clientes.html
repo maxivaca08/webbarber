@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>👤 Clientes</h2>
+  <a href="{{ url_for('nuevo_cliente') }}" class="btn btn-primary">＋ Nuevo cliente</a>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Registrado</th><th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ c.id }}</td>
+        <td><strong>{{ c.nombre }} {{ c.apellido }}</strong></td>
+        <td>{{ c.telefono or '—' }}</td>
+        <td>{{ c.email or '—' }}</td>
+        <td style="color:var(--text-muted);font-size:13px">{{ c.creado_en[:10] }}</td>
+        <td class="actions">
+          <a href="{{ url_for('editar_cliente', id=c.id) }}" class="btn btn-ghost btn-sm">✏️ Editar</a>
+          <form method="post" action="{{ url_for('eliminar_cliente', id=c.id) }}"
+                onsubmit="return confirm('¿Eliminar cliente?')">
+            <button class="btn btn-danger btn-sm">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">
+        No hay clientes registrados.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

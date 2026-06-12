@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if barbero else 'Nuevo' }} Barbero{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>💈 {{ 'Editar' if barbero else 'Nuevo' }} Barbero</h2>
+</div>
+
+<div class="form-card">
+  <form method="post">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" name="nombre" value="{{ barbero.nombre if barbero else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label>Apellido *</label>
+        <input type="text" name="apellido" value="{{ barbero.apellido if barbero else '' }}" required>
+      </div>
+      <div class="form-group full">
+        <label>Especialidad</label>
+        <input type="text" name="especialidad" value="{{ barbero.especialidad if barbero else '' }}"
+               placeholder="Ej: Corte clásico, Coloración...">
+      </div>
+      {% if barbero %}
+      <div class="form-group full">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="activo" style="width:auto"
+                 {{ 'checked' if barbero.activo else '' }}>
+          Barbero activo
+        </label>
+      </div>
+      {% endif %}
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">💾 Guardar</button>
+      <a href="{{ url_for('barberos') }}" class="btn btn-ghost">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

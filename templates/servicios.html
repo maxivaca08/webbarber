@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Servicios{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>📋 Servicios</h2>
+  <a href="{{ url_for('nuevo_servicio') }}" class="btn btn-primary">＋ Nuevo servicio</a>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>#</th><th>Nombre</th><th>Descripción</th><th>Duración</th><th>Precio</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for s in servicios %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ s.id }}</td>
+        <td><strong>{{ s.nombre }}</strong></td>
+        <td style="color:var(--text-muted)">{{ s.descripcion or '—' }}</td>
+        <td>{{ s.duracion_minutos }} min</td>
+        <td><strong>${{ "%.0f"|format(s.precio) }}</strong></td>
+        <td class="actions">
+          <a href="{{ url_for('editar_servicio', id=s.id) }}" class="btn btn-ghost btn-sm">✏️ Editar</a>
+          <form method="post" action="{{ url_for('eliminar_servicio', id=s.id) }}"
+                onsubmit="return confirm('¿Eliminar servicio?')">
+            <button class="btn btn-danger btn-sm">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">
+        No hay servicios registrados.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
