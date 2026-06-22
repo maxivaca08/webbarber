@@ -1,0 +1,206 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaLarga } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'admin') return Astro.redirect('/cliente');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action') as string;
+
+  let endpoint = '';
+  let body: object = {};
+
+  if (action === 'generar') {
+    endpoint = '/api/admin/disponibilidad/generar';
+    body = {
+      fecha_inicio:    form.get('fecha_inicio'),
+      fecha_fin:       form.get('fecha_fin'),
+      hora_inicio:     form.get('hora_inicio'),
+      hora_fin:        form.get('hora_fin'),
+      almuerzo_inicio: form.get('almuerzo_inicio') || null,
+      almuerzo_fin:    form.get('almuerzo_fin') || null,
+      dias:            form.getAll('dias'),
+    };
+  } else if (action === 'bloquear') {
+    endpoint = '/api/admin/disponibilidad/bloquear-dia';
+    body = { fecha: form.get('fecha') };
+  } else if (action === 'eliminar') {
+    endpoint = '/api/admin/disponibilidad/eliminar-libres';
+    body = { fecha: form.get('fecha') };
+  } else if (action === 'toggle') {
+    const slotId = form.get('slot_id');
+    endpoint = `/api/admin/disponibilidad/${slotId}/toggle`;
+    body = {};
+  } else if (action === 'eliminar_slot') {
+    const slotId = form.get('slot_id');
+    endpoint = `/api/admin/disponibilidad/${slotId}/eliminar`;
+    body = {};
+  }
+
+  if (endpoint) {
+    const res = await apiFetch(endpoint, Astro.request, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    alerts = [{ cat: res.ok ? 'success' : 'danger', msg: json.message ?? json.error ?? '' }];
+  }
+}
+
+const res = await apiFetch('/api/admin/disponibilidad', Astro.request);
+const { by_date = {} } = res.ok ? await res.json() : {};
+const dates = Object.keys(by_date).sort();
+---
+<AdminLayout title="Disponibilidad" active="disponibilidad" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>⚙️ Gestión de disponibilidad</h2>
+  </div>
+
+  <!-- Generar slots -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-header">➕ Generar horarios disponibles</div>
+    <div style="padding:20px">
+      <form method="post">
+        <input type="hidden" name="_action" value="generar" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha inicio *</label>
+            <input type="date" name="fecha_inicio" required />
+          </div>
+          <div class="form-group">
+            <label>Fecha fin *</label>
+            <input type="date" name="fecha_fin" required />
+          </div>
+          <div class="form-group">
+            <label>Hora de inicio *</label>
+            <input type="time" name="hora_inicio" value="09:00" required />
+          </div>
+          <div class="form-group">
+            <label>Hora de finalización * <span style="font-size:11px">(el último turno empieza 1h antes)</span></label>
+            <input type="time" name="hora_fin" value="18:00" required />
+          </div>
+          <div class="form-group">
+            <label>Inicio de almuerzo <span style="font-size:11px">(opcional)</span></label>
+            <input type="time" name="almuerzo_inicio" />
+          </div>
+          <div class="form-group">
+            <label>Fin de almuerzo <span style="font-size:11px">(opcional)</span></label>
+            <input type="time" name="almuerzo_fin" />
+          </div>
+          <div class="form-group full">
+            <label>Días de la semana *</label>
+            <div class="checkbox-group">
+              {[
+                { v: '0', l: 'Lunes',     def: true },
+                { v: '1', l: 'Martes',    def: true },
+                { v: '2', l: 'Miércoles', def: true },
+                { v: '3', l: 'Jueves',    def: true },
+                { v: '4', l: 'Viernes',   def: true },
+                { v: '5', l: 'Sábado',    def: false },
+                { v: '6', l: 'Domingo',   def: false },
+              ].map(d => (
+                <label>
+                  <input type="checkbox" name="dias" value={d.v} checked={d.def} />
+                  {d.l}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <button type="submit" class="btn btn-primary">⚡ Generar horarios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bloquear / Eliminar día -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-header">🚫 Acciones por día completo</div>
+    <div style="padding:16px 20px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <form method="post" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="_action" value="bloquear" />
+        <div class="form-group">
+          <label>Bloquear día <span style="font-size:11px;color:var(--text-muted)">(se puede desbloquear después)</span></label>
+          <input type="date" name="fecha" required style="min-width:160px" />
+        </div>
+        <button type="submit" class="btn btn-warning">🔒 Bloquear día</button>
+      </form>
+      <form method="post" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"
+            onsubmit="return confirm('¿Eliminar todos los horarios libres de ese día? Esta acción no se puede deshacer.')">
+        <input type="hidden" name="_action" value="eliminar" />
+        <div class="form-group">
+          <label>Eliminar día <span style="font-size:11px;color:var(--text-muted)">(borra los horarios definitivamente)</span></label>
+          <input type="date" name="fecha" required style="min-width:160px" />
+        </div>
+        <button type="submit" class="btn btn-danger">🗑 Eliminar día</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Leyenda -->
+  <div class="page-header" style="margin-bottom:16px">
+    <h3 style="font-size:18px;font-weight:600">📋 Horarios próximos</h3>
+    <div style="display:flex;gap:10px;font-size:13px;align-items:center;flex-wrap:wrap">
+      <span class="slot-pill libre" style="pointer-events:none">libre</span>
+      <span class="slot-pill ocupado" style="pointer-events:none">reservado</span>
+      <span class="slot-pill bloqueado" style="pointer-events:none">bloqueado</span>
+    </div>
+  </div>
+
+  {dates.length > 0 ? dates.map(fecha => (
+    <div class="fecha-block">
+      <div class="fecha-header">
+        <h3>{fechaLarga(fecha)}</h3>
+        <span>{by_date[fecha].length} horario{by_date[fecha].length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="slots-row">
+        {by_date[fecha].map((s: any) => (
+          s.turno_id ? (
+            <div class="slot-pill ocupado" style="flex-direction:column;align-items:flex-start;padding:8px 14px;gap:2px;display:inline-flex">
+              <strong>{s.hora_inicio} – {s.hora_fin}</strong>
+              <span style="font-size:11px">{s.cliente_nombre}</span>
+              {s.cliente_tel && <span style="font-size:11px;opacity:.7">{s.cliente_tel}</span>}
+            </div>
+          ) : (
+            <div style="display:inline-flex;align-items:center;gap:4px">
+              <form method="post" style="display:inline">
+                <input type="hidden" name="_action" value="toggle" />
+                <input type="hidden" name="slot_id" value={s.id} />
+                <button type="submit" class={`slot-pill ${s.disponible ? 'libre' : 'bloqueado'}`}
+                        title={s.disponible ? 'Click para bloquear' : 'Click para desbloquear'}>
+                  {s.hora_inicio} – {s.hora_fin} {s.disponible ? '🔓' : '🔒'}
+                </button>
+              </form>
+              <form method="post" style="display:inline"
+                    onsubmit={`return confirm('¿Eliminar el turno de ${s.hora_inicio} definitivamente?')`}>
+                <input type="hidden" name="_action" value="eliminar_slot" />
+                <input type="hidden" name="slot_id" value={s.id} />
+                <button type="submit"
+                        title="Eliminar este horario"
+                        style="background:none;border:none;cursor:pointer;font-size:14px;padding:4px;opacity:0.5;line-height:1"
+                        onmouseover="this.style.opacity='1'"
+                        onmouseout="this.style.opacity='0.5'">
+                  🗑
+                </button>
+              </form>
+            </div>
+          )
+        ))}
+      </div>
+    </div>
+  )) : (
+    <div class="empty-state">
+      <div class="icon">📭</div>
+      <p>No hay horarios cargados para los próximos días.</p>
+      <p style="font-size:13px">Usá el formulario de arriba para generar la disponibilidad.</p>
+    </div>
+  )}
+</AdminLayout>

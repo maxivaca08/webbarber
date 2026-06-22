@@ -1,0 +1,65 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { apiFetch } from '../utils/api';
+
+// Already logged in?
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (meRes.ok) {
+  const u = await meRes.json();
+  return Astro.redirect(u.rol === 'admin' ? '/admin' : '/cliente');
+}
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const res = await apiFetch('/api/auth/login', Astro.request, {
+    method: 'POST',
+    body: JSON.stringify({
+      email:    form.get('email'),
+      password: form.get('password'),
+    }),
+  });
+  const json = await res.json();
+  if (json.success) {
+    const setCookie = res.headers.get('set-cookie');
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: json.redirect,
+        ...(setCookie ? { 'Set-Cookie': setCookie } : {}),
+      },
+    });
+  }
+  alerts = [{ cat: 'danger', msg: json.error ?? 'Error al iniciar sesión.' }];
+}
+---
+<AuthLayout title="Iniciar sesión" alerts={alerts}>
+  <div slot="logo" class="auth-logo">
+    <span class="icon">✂️</span>
+    <h1>BarberApp</h1>
+    <p>Sistema de turnos para tu peluquería</p>
+  </div>
+
+  <form method="post" autocomplete="on">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div class="form-group">
+        <label>Correo electrónico</label>
+        <input type="email" name="email" placeholder="tu@email.com" required autofocus />
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" name="password" placeholder="••••••••" required />
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button type="submit" class="btn btn-primary btn-block" style="padding:14px">
+        Iniciar sesión
+      </button>
+    </div>
+  </form>
+
+  <div class="auth-footer" style="margin-top:16px">
+    ¿No tenés cuenta? <a href="/register">Registrarse</a>
+  </div>
+</AuthLayout>

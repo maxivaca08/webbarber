@@ -1,0 +1,98 @@
+---
+import ClienteLayout from '../../layouts/ClienteLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta, diaSemana } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'cliente') return Astro.redirect('/admin');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'cancelar') {
+    const id = form.get('id');
+    const res = await apiFetch(`/api/cliente/turnos/${id}/cancelar`, Astro.request, { method: 'POST' });
+    const json = await res.json();
+    alerts = [{ cat: res.ok ? 'info' : 'danger', msg: json.message ?? json.error ?? '' }];
+  }
+}
+
+const dashRes = await apiFetch('/api/cliente/dashboard', Astro.request);
+const { proximos = [], historial = [] } = dashRes.ok ? await dashRes.json() : {};
+---
+<ClienteLayout title="Inicio" active="dashboard" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>Hola, {user.nombre} 👋</h2>
+    <a href="/cliente/reservar" class="btn btn-primary">➕ Reservar turno</a>
+  </div>
+
+  <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+    <h3 style="font-size:17px;font-weight:600">📅 Próximos turnos</h3>
+    <a href="/cliente/mis-turnos" style="font-size:13px;color:var(--accent-light);text-decoration:none">
+      Ver historial →
+    </a>
+  </div>
+
+  {proximos.length > 0 ? proximos.map((t: any) => (
+    <div class="turno-card">
+      <div>
+        <div class="turno-fecha">{fechaCorta(t.fecha)}</div>
+        <div class="turno-dia">{diaSemana(t.fecha)}</div>
+        <div class="turno-hora">{t.hora_inicio} – {t.hora_fin}hs</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class={`badge badge-${t.estado}`}>{t.estado}</span>
+        {(t.estado === 'reservado' || t.estado === 'confirmado') && (
+          <>
+            <a href={`/cliente/reprogramar/${t.id}`} class="btn btn-ghost btn-sm">🔄 Reprogramar</a>
+            <form method="post" onsubmit="return confirm('¿Cancelar este turno?')">
+              <input type="hidden" name="_action" value="cancelar" />
+              <input type="hidden" name="id" value={t.id} />
+              <button class="btn btn-danger btn-sm">✕ Cancelar</button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  )) : (
+    <div class="empty-state">
+      <div class="icon">✂️</div>
+      <p>No tenés turnos próximos.</p>
+      <a href="/cliente/reservar" class="btn btn-primary">Reservar ahora</a>
+    </div>
+  )}
+
+  {historial.length > 0 && (
+    <>
+      <div style="margin-top:32px;margin-bottom:8px">
+        <h3 style="font-size:17px;font-weight:600">📋 Historial reciente</h3>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Fecha</th><th>Horario</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              {historial.map((t: any) => (
+                <tr>
+                  <td>
+                    <strong>{fechaCorta(t.fecha)}</strong>
+                    <span style="color:var(--text-muted);font-size:12px;display:block">{diaSemana(t.fecha)}</span>
+                  </td>
+                  <td>{t.hora_inicio} – {t.hora_fin}</td>
+                  <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )}
+</ClienteLayout>

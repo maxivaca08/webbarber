@@ -1,0 +1,163 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'admin') return Astro.redirect('/cliente');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+const res = await apiFetch('/api/admin/clientes', Astro.request);
+const { clientes = [] } = res.ok ? await res.json() : {};
+---
+<AdminLayout title="Clientes" active="clientes" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>👥 Clientes registrados</h2>
+    <span style="font-size:14px;color:var(--text-muted)">{clientes.length} clientes en total</span>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <input type="text" id="buscador"
+           placeholder="🔍 Buscar por nombre, email o teléfono..."
+           style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--surface,#111827);color:var(--text,#f9fafb);font-size:14px" />
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Nombre</th><th>Teléfono</th><th>Email</th>
+            <th>Activos</th><th>Total</th><th>Registrado</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clientes.length > 0 ? clientes.map((c: any) => (
+            <tr>
+              <td style="color:var(--text-muted)">{c.id}</td>
+              <td><strong>{c.nombre} {c.apellido}</strong></td>
+              <td>{c.telefono || '—'}</td>
+              <td style="color:var(--text-muted)">{c.email}</td>
+              <td>
+                {c.turnos_activos > 0
+                  ? <span class="badge badge-confirmado">{c.turnos_activos}</span>
+                  : <span style="color:var(--text-muted)">0</span>
+                }
+              </td>
+              <td>{c.total_turnos}</td>
+              <td style="color:var(--text-muted);font-size:12px">
+                {c.creado_en ? fechaCorta(c.creado_en.substring(0, 10)) : '—'}
+              </td>
+              <td>
+                <button class="btn btn-sm"
+                        style="font-size:12px"
+                        data-id={c.id}
+                        data-nombre={`${c.nombre} ${c.apellido}`}
+                        onclick="abrirModal(this)">
+                  🔑 Resetear contraseña
+                </button>
+              </td>
+            </tr>
+          )) : (
+            <tr>
+              <td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">
+                No hay clientes registrados aún.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<!-- Modal -->
+<div id="modal-reset" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface,#111827);border-radius:12px;padding:28px;width:100%;max-width:380px;margin:16px">
+    <h3 style="margin-bottom:6px;font-size:16px">🔑 Resetear contraseña</h3>
+    <p id="modal-nombre" style="color:var(--text-muted);font-size:13px;margin-bottom:16px"></p>
+    <div class="form-group" style="margin-bottom:16px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Nueva contraseña temporal</label>
+      <input type="text" id="input-nueva-pass"
+             placeholder="Mínimo 6 caracteres"
+             style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--surface2,#1f2937);color:var(--text,#f9fafb);font-size:14px" />
+      <p id="modal-error" style="display:none;color:#ef4444;font-size:12px;margin-top:4px"></p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" style="flex:1" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1" id="btn-confirmar-reset">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Buscador en tiempo real
+document.getElementById('buscador')!.addEventListener('input', (e) => {
+  const q = (e.target as HTMLInputElement).value.toLowerCase().trim();
+  document.querySelectorAll('tbody tr').forEach((fila) => {
+    const texto = fila.textContent?.toLowerCase() ?? '';
+    (fila as HTMLElement).style.display = texto.includes(q) ? '' : 'none';
+  });
+});
+
+let clienteIdActual: number | null = null;
+
+function abrirModal(btn: HTMLElement) {
+  clienteIdActual = Number(btn.dataset.id);
+  const modal = document.getElementById('modal-reset')!;
+  const nombre = document.getElementById('modal-nombre')!;
+  const input  = document.getElementById('input-nueva-pass') as HTMLInputElement;
+  const err    = document.getElementById('modal-error')!;
+  nombre.textContent = `Cliente: ${btn.dataset.nombre}`;
+  input.value = '';
+  err.style.display = 'none';
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+}
+
+function cerrarModal() {
+  document.getElementById('modal-reset')!.style.display = 'none';
+  clienteIdActual = null;
+}
+
+document.getElementById('modal-reset')!.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) cerrarModal();
+});
+
+document.getElementById('btn-confirmar-reset')!.addEventListener('click', async () => {
+  const input = document.getElementById('input-nueva-pass') as HTMLInputElement;
+  const err   = document.getElementById('modal-error')!;
+  const pass  = input.value.trim();
+
+  if (pass.length < 6) {
+    err.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirmar-reset') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const res  = await fetch(`/api/admin/clientes/${clienteIdActual}/resetear-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nueva_password: pass }),
+  });
+  const json = await res.json();
+
+  btn.disabled = false;
+  btn.textContent = 'Confirmar';
+
+  if (res.ok && json.success) {
+    cerrarModal();
+    alert(`✅ Contraseña reseteada. La nueva contraseña temporal es:\n\n"${pass}"\n\nComunicásela al cliente.`);
+  } else {
+    err.textContent = json.error ?? 'Error al resetear la contraseña.';
+    err.style.display = 'block';
+  }
+});
+</script>

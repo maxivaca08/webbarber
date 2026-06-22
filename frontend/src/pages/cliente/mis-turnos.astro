@@ -1,0 +1,86 @@
+---
+import ClienteLayout from '../../layouts/ClienteLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta, diaSemana } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'cliente') return Astro.redirect('/admin');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = form.get('id');
+  const res = await apiFetch(`/api/cliente/turnos/${id}/cancelar`, Astro.request, { method: 'POST' });
+  const json = await res.json();
+  alerts = [{ cat: res.ok ? 'info' : 'danger', msg: json.message ?? json.error ?? '' }];
+}
+
+const res = await apiFetch('/api/cliente/mis-turnos', Astro.request);
+const { turnos = [], hoy = '' } = res.ok ? await res.json() : {};
+---
+<ClienteLayout title="Mis turnos" active="mis-turnos" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>📋 Mis turnos</h2>
+    <a href="/cliente/reservar" class="btn btn-primary">➕ Nuevo turno</a>
+  </div>
+
+  {turnos.length > 0 ? (
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Horario</th><th>Estado</th><th>Acciones</th></tr>
+          </thead>
+          <tbody>
+            {turnos.map((t: any) => (
+              <tr>
+                <td>
+                  <strong>{fechaCorta(t.fecha)}</strong>
+                  <span style="color:var(--text-muted);font-size:12px;display:block">{diaSemana(t.fecha)}</span>
+                </td>
+                <td><strong>{t.hora_inicio}</strong> – {t.hora_fin}hs</td>
+                <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+                <td class="actions">
+                  {t.estado === 'pendiente' ? (
+                    <>
+                      <span style="font-size:12px;color:#fbbf24;display:block;margin-bottom:6px">⏳ Pendiente de verificación de pago</span>
+                      <form method="post" onsubmit="return confirm('¿Cancelar esta solicitud?')">
+                        <input type="hidden" name="id" value={t.id} />
+                        <button class="btn btn-danger btn-sm">✕ Cancelar solicitud</button>
+                      </form>
+                    </>
+                  ) : t.estado === 'rechazado' ? (
+                    <span style="font-size:12px;color:#f87171">❌ Seña no verificada — turno rechazado</span>
+                  ) : (t.estado === 'reservado' || t.estado === 'confirmado') && t.fecha >= hoy ? (
+                    <>
+                      {t.puede_reprogramar ? (
+                        <a href={`/cliente/reprogramar/${t.id}`} class="btn btn-ghost btn-sm">🔄 Reprogramar</a>
+                      ) : (
+                        <span class="btn btn-ghost btn-sm" style="opacity:.45;cursor:not-allowed" title="No es posible reprogramar cuando faltan 8 horas o menos para el turno">🔄 Reprogramar</span>
+                      )}
+                      <form method="post" onsubmit="return confirm('¿Cancelar este turno?')">
+                        <input type="hidden" name="id" value={t.id} />
+                        <button class="btn btn-danger btn-sm">✕ Cancelar</button>
+                      </form>
+                    </>
+                  ) : (
+                    <span style="font-size:12px;color:var(--text-muted)">Sin acciones</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : (
+    <div class="empty-state">
+      <div class="icon">✂️</div>
+      <p>Todavía no tenés ningún turno.</p>
+      <a href="/cliente/reservar" class="btn btn-primary">Reservar ahora</a>
+    </div>
+  )}
+</ClienteLayout>

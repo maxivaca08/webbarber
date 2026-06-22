@@ -1,0 +1,79 @@
+{% extends 'base_admin.html' %}
+{% block title %}Turnos pendientes{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>⏳ Turnos pendientes de verificación</h2>
+</div>
+
+<div class="alert alert-info" style="margin-bottom:20px">
+  💳 Alias de transferencia: <strong>{{ sena_alias }}</strong> — Monto: <strong>${{ sena_monto|int }}</strong>
+</div>
+
+{% if pendientes %}
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Cliente</th>
+          <th>Email</th>
+          <th>Teléfono</th>
+          <th>Fecha</th>
+          <th>Hora</th>
+          <th>Solicitado</th>
+          <th>Comprobante</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in pendientes %}
+        <tr>
+          <td style="color:var(--text-muted)">{{ t.id }}</td>
+          <td><strong>{{ t.cliente }}</strong></td>
+          <td style="font-size:13px;color:var(--text-muted)">{{ t.email }}</td>
+          <td>{{ t.telefono or '—' }}</td>
+          <td>
+            <strong>{{ t.fecha|fecha_corta }}</strong>
+            <span style="display:block;font-size:12px;color:var(--text-muted)">{{ t.fecha|dia_semana }}</span>
+          </td>
+          <td><strong>{{ t.hora_inicio }}</strong> – {{ t.hora_fin }}hs</td>
+          <td style="font-size:12px;color:var(--text-muted)">
+            {{ t.creado_en[:16] if t.creado_en else '—' }}
+          </td>
+          <td>
+            {% if t.comprobante_path %}
+              <a href="{{ url_for('static', filename=t.comprobante_path) }}"
+                 target="_blank"
+                 class="btn btn-sm"
+                 style="font-size:12px">📎 Ver</a>
+            {% else %}
+              <span style="color:var(--text-muted);font-size:12px">Sin adjunto</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <form method="post" action="{{ url_for('admin_aprobar_turno', id=t.id) }}"
+                    onsubmit="return confirm('¿Confirmar este turno? Verificaste que recibiste la transferencia.')">
+                <button class="btn btn-success btn-sm">✅ Aprobar</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_rechazar_turno', id=t.id) }}"
+                    onsubmit="return confirm('¿Rechazar esta solicitud? El horario quedará libre.')">
+                <button class="btn btn-danger btn-sm">✕ Rechazar</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">✅</div>
+  <p>No hay solicitudes pendientes de verificación.</p>
+  <p style="font-size:13px;color:var(--text-muted)">Cuando un cliente reserve un turno y declare haber transferido la seña, aparecerá aquí.</p>
+</div>
+{% endif %}
+{% endblock %}

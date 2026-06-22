@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Admin{% endblock %} — BarberApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+  {% block head %}{% endblock %}
+</head>
+<body class="app-body">
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">✂️</div>
+    <div>
+      <h1>BarberApp</h1>
+      <span>Panel Admin</span>
+    </div>
+  </div>
+  <nav>
+    <a href="{{ url_for('admin_dashboard') }}"
+       class="{% if request.endpoint=='admin_dashboard' %}active{% endif %}">
+      <span class="nav-icon">🏠</span><span>Dashboard</span>
+    </a>
+    <a href="{{ url_for('admin_turnos') }}"
+       class="{% if request.endpoint=='admin_turnos' or request.endpoint=='admin_cambiar_estado' %}active{% endif %}">
+      <span class="nav-icon">📅</span><span>Turnos</span>
+    </a>
+    <a href="{{ url_for('admin_clientes') }}"
+       class="{% if request.endpoint=='admin_clientes' %}active{% endif %}">
+      <span class="nav-icon">👥</span><span>Clientes</span>
+    </a>
+    <a href="{{ url_for('admin_disponibilidad') }}"
+       class="{% if 'disponibilidad' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">⚙️</span><span>Disponibilidad</span>
+    </a>
+    <a href="{{ url_for('admin_turnos_pendientes') }}"
+       class="{% if request.endpoint in ('admin_turnos_pendientes','admin_aprobar_turno','admin_rechazar_turno') %}active{% endif %}"
+       style="position:relative">
+      <span class="nav-icon">⏳</span><span>Pendientes</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <strong>{{ session.nombre }}</strong>
+      <span>Administrador</span>
+    </div>
+    <a href="{{ url_for('logout') }}" title="Cerrar sesión">🚪</a>
+  </div>
+</aside>
+
+<main class="main">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat == 'success' %}✅{% elif cat == 'info' %}ℹ️{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

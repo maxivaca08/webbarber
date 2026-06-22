@@ -1,0 +1,117 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta, diaSemana } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'admin') return Astro.redirect('/cliente');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form   = await Astro.request.formData();
+  const id     = form.get('id');
+  const action = form.get('_action');
+
+  const endpoint = action === 'aprobar'
+    ? `/api/admin/turnos-pendientes/${id}/aprobar`
+    : `/api/admin/turnos-pendientes/${id}/rechazar`;
+
+  const res  = await apiFetch(endpoint, Astro.request, { method: 'POST' });
+  const json = await res.json();
+  alerts = [{ cat: res.ok ? 'success' : 'danger', msg: json.message ?? json.error ?? '' }];
+}
+
+const dataRes = await apiFetch('/api/admin/turnos-pendientes', Astro.request);
+const { pendientes = [], sena_alias = '', sena_monto = 0 } = dataRes.ok ? await dataRes.json() : {};
+---
+<AdminLayout title="Turnos pendientes" active="pendientes" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>⏳ Turnos pendientes de verificación</h2>
+  </div>
+
+  <div class="alert alert-info" style="margin-bottom:20px">
+    💳 Alias de transferencia: <strong>{sena_alias}</strong> — Monto: <strong>${sena_monto.toLocaleString('es-AR')}</strong>
+  </div>
+
+  {pendientes.length > 0 ? (
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Cliente</th>
+              <th>Email</th>
+              <th>Teléfono</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Solicitado</th>
+              <th>Comprobante</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(pendientes as any[]).map((t: any) => {
+              const archivoNombre = t.comprobante_path ? t.comprobante_path.split('/').pop() : null;
+              const comprobanteUrl = archivoNombre ? `/api/admin/comprobante/${archivoNombre}` : null;
+              return (
+              <tr>
+                <td style="color:var(--text-muted)">{t.id}</td>
+                <td><strong>{t.cliente}</strong></td>
+                <td style="font-size:13px;color:var(--text-muted)">{t.email}</td>
+                <td>{t.telefono || '—'}</td>
+                <td>
+                  <strong>{fechaCorta(t.fecha)}</strong>
+                  <span style="color:var(--text-muted);font-size:12px;display:block">{diaSemana(t.fecha)}</span>
+                </td>
+                <td><strong>{t.hora_inicio}</strong> – {t.hora_fin}hs</td>
+                <td style="font-size:12px;color:var(--text-muted)">
+                  {t.creado_en ? t.creado_en.slice(0, 16) : '—'}
+                </td>
+                <td>
+                  {comprobanteUrl ? (
+                    <a href={comprobanteUrl} target="_blank" rel="noopener"
+                       class="btn btn-sm"
+                       style="font-size:12px;white-space:nowrap">
+                      📎 Ver comprobante
+                    </a>
+                  ) : (
+                    <span style="color:var(--text-muted);font-size:12px">Sin adjunto</span>
+                  )}
+                </td>
+                <td>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <form method="post" onsubmit="return confirm('¿Confirmar este turno? Verificaste el comprobante de transferencia.')">
+                      <input type="hidden" name="id" value={t.id} />
+                      <input type="hidden" name="_action" value="aprobar" />
+                      <button class="btn btn-success btn-sm"
+                              disabled={!comprobanteUrl || undefined}
+                              title={!comprobanteUrl ? 'El cliente no adjuntó comprobante' : ''}>
+                        ✅ Aprobar
+                      </button>
+                    </form>
+                    <form method="post" onsubmit="return confirm('¿Rechazar esta solicitud? El horario quedará libre.')">
+                      <input type="hidden" name="id" value={t.id} />
+                      <input type="hidden" name="_action" value="rechazar" />
+                      <button class="btn btn-danger btn-sm">✕ Rechazar</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : (
+    <div class="empty-state">
+      <div class="icon">✅</div>
+      <p>No hay solicitudes pendientes de verificación.</p>
+      <p style="font-size:13px;color:var(--text-muted)">Cuando un cliente reserve un turno y declare haber transferido la seña, aparecerá aquí.</p>
+    </div>
+  )}
+</AdminLayout>

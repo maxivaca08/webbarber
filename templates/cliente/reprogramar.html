@@ -1,0 +1,96 @@
+{% extends 'base_cliente.html' %}
+{% block title %}Reprogramar turno{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>🔄 Reprogramar turno</h2>
+</div>
+
+<!-- Turno actual -->
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+            padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+  <div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Turno actual</p>
+    <p style="font-size:18px;font-weight:700">
+      {{ turno.fecha|fecha_larga }} — {{ turno.hora_inicio }} a {{ turno.hora_fin }}hs
+    </p>
+  </div>
+  <span class="badge badge-{{ turno.estado }}">{{ turno.estado }}</span>
+</div>
+
+<p style="color:var(--text-muted);font-size:14px;margin-bottom:20px">
+  Seleccioná el nuevo horario. Tu turno anterior quedará liberado automáticamente.
+</p>
+
+{% if by_date %}
+<form method="post" id="reprog-form">
+  <input type="hidden" name="disponibilidad_id" id="disp-input">
+
+  {% for fecha, slots in by_date.items() %}
+  <div class="fecha-block">
+    <div class="fecha-header">
+      <h3>{{ fecha|fecha_larga }}</h3>
+      <span>{{ slots|length }} horario{{ 's' if slots|length != 1 }} disponible{{ 's' if slots|length != 1 }}</span>
+    </div>
+    <div class="slots-row">
+      {% for s in slots %}
+      <button type="button"
+              class="slot-btn"
+              data-id="{{ s.id }}"
+              data-fecha="{{ fecha|fecha_larga }}"
+              data-hora="{{ s.hora_inicio }} – {{ s.hora_fin }}">
+        <span class="hora">{{ s.hora_inicio }}</span>
+        <span class="label">hasta {{ s.hora_fin }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="confirm-bar" id="confirm-bar" style="display:none">
+    <p>
+      Nuevo turno: <span class="hora-sel" id="conf-fecha">—</span>
+      a las <span class="hora-sel" id="conf-hora">—</span>
+    </p>
+    <div style="display:flex;gap:10px">
+      <a href="{{ url_for('cliente_mis_turnos') }}" class="btn btn-ghost">Cancelar</a>
+      <button type="button" class="btn btn-ghost" id="btn-deselect">✕ Cambiar</button>
+      <button type="submit" class="btn btn-primary">✅ Confirmar cambio</button>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="empty-state">
+  <div class="icon">📭</div>
+  <p>No hay otros horarios disponibles para reprogramar.</p>
+  <a href="{{ url_for('cliente_mis_turnos') }}" class="btn btn-ghost">Volver a mis turnos</a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const buttons   = document.querySelectorAll('.slot-btn');
+const dispInput = document.getElementById('disp-input');
+const bar       = document.getElementById('confirm-bar');
+const confFecha = document.getElementById('conf-fecha');
+const confHora  = document.getElementById('conf-hora');
+
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    dispInput.value      = btn.dataset.id;
+    confFecha.textContent = btn.dataset.fecha;
+    confHora.textContent  = btn.dataset.hora + 'hs';
+    bar.style.display = 'flex';
+  });
+});
+
+document.getElementById('btn-deselect')?.addEventListener('click', () => {
+  buttons.forEach(b => b.classList.remove('selected'));
+  dispInput.value = '';
+  bar.style.display = 'none';
+});
+</script>
+{% endblock %}

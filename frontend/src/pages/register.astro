@@ -1,0 +1,158 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { apiFetch } from '../utils/api';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (meRes.ok) return Astro.redirect('/');
+
+let alerts: { cat: string; msg: string }[] = [];
+let formValues: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  formValues = {
+    nombre:        String(form.get('nombre') ?? ''),
+    apellido:      String(form.get('apellido') ?? ''),
+    telefono:      String(form.get('telefono') ?? ''),
+    email:         String(form.get('email') ?? ''),
+    callmebot_key: String(form.get('callmebot_key') ?? ''),
+  };
+
+  const res = await apiFetch('/api/auth/register', Astro.request, {
+    method: 'POST',
+    body: JSON.stringify({
+      ...formValues,
+      password:         form.get('password'),
+      confirm_password: form.get('confirm_password'),
+    }),
+  });
+  const json = await res.json();
+  if (json.success) {
+    return new Response(null, { status: 302, headers: { Location: '/login?registered=1' } });
+  }
+  alerts = [{ cat: 'danger', msg: json.error ?? 'Error al registrarse.' }];
+}
+---
+<AuthLayout title="Crear cuenta" alerts={alerts}>
+  <div slot="logo" class="auth-logo">
+    <span class="icon">✂️</span>
+    <h1>Crear cuenta</h1>
+    <p>Registrate para reservar tu turno</p>
+  </div>
+
+  <form method="post" id="register-form">
+    <!-- Paso 1: datos de la cuenta -->
+    <div id="paso-1">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Nombre *</label>
+          <input type="text" name="nombre" value={formValues.nombre ?? ''} required autofocus />
+        </div>
+        <div class="form-group">
+          <label>Apellido *</label>
+          <input type="text" name="apellido" value={formValues.apellido ?? ''} required />
+        </div>
+        <div class="form-group">
+          <label>Teléfono * (con código de área, sin 0 ni 15)</label>
+          <input type="tel" name="telefono" id="input-telefono" value={formValues.telefono ?? ''} placeholder="Ej: 3876319654" required />
+        </div>
+        <div class="form-group">
+          <label>Correo electrónico *</label>
+          <input type="email" name="email" value={formValues.email ?? ''} required />
+        </div>
+        <div class="form-group">
+          <label>Contraseña *</label>
+          <input type="password" name="password" required placeholder="Mínimo 6 caracteres" />
+        </div>
+        <div class="form-group">
+          <label>Confirmar contraseña *</label>
+          <input type="password" name="confirm_password" required placeholder="Repetí la contraseña" />
+        </div>
+      </div>
+      <div style="margin-top:20px">
+        <button type="button" id="btn-siguiente" class="btn btn-primary btn-block" style="padding:14px">
+          Siguiente →
+        </button>
+      </div>
+    </div>
+
+    <!-- Paso 2: activar recordatorios por WhatsApp -->
+    <div id="paso-2" style="display:none">
+      <div style="background:var(--surface2,#1f2937);border-radius:12px;padding:20px;margin-bottom:20px">
+        <p style="font-size:15px;font-weight:600;margin-bottom:6px">📲 Recordatorios por WhatsApp (opcional)</p>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+          Podés recibir un recordatorio automático 24hs antes de tu turno. Solo necesitás hacer este paso una vez.
+        </p>
+
+        <p style="font-size:13px;font-weight:600;margin-bottom:8px">Paso 1 — Mandá este mensaje a CallMeBot:</p>
+        <a id="btn-wa-suscribir"
+           href="#"
+           target="_blank"
+           rel="noopener"
+           style="display:inline-flex;align-items:center;gap:8px;background:#25d366;color:#fff;font-weight:600;font-size:13px;padding:9px 14px;border-radius:8px;text-decoration:none;margin-bottom:16px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          Abrir WhatsApp para suscribirme
+        </a>
+
+        <p style="font-size:13px;font-weight:600;margin-bottom:6px">Paso 2 — Pegá acá la API key que te mandó CallMeBot:</p>
+        <input type="text" name="callmebot_key" id="input-callmebot-key"
+               value={formValues.callmebot_key ?? ''}
+               placeholder="Ej: 123456"
+               style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--surface,#111827);color:var(--text,#f9fafb);font-size:14px" />
+        <p style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          Si no querés activar los recordatorios ahora, podés saltear este paso.
+        </p>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button type="button" id="btn-volver" class="btn btn-ghost" style="flex:1;padding:12px">
+          ← Volver
+        </button>
+        <button type="submit" class="btn btn-primary" style="flex:2;padding:12px">
+          Crear cuenta
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="auth-footer" style="margin-top:16px">
+    ¿Ya tenés cuenta? <a href="/login">Iniciar sesión</a>
+  </div>
+</AuthLayout>
+
+<script>
+const paso1      = document.getElementById('paso-1')!;
+const paso2      = document.getElementById('paso-2')!;
+const btnSig     = document.getElementById('btn-siguiente')!;
+const btnVolver  = document.getElementById('btn-volver')!;
+const btnWaSub   = document.getElementById('btn-wa-suscribir') as HTMLAnchorElement;
+const inputTel   = document.getElementById('input-telefono') as HTMLInputElement;
+
+// Al avanzar al paso 2, validar campos requeridos del paso 1
+btnSig.addEventListener('click', () => {
+  const form = document.getElementById('register-form') as HTMLFormElement;
+  // Disparar validación nativa de HTML5
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+  // Armar link de WA con el número ingresado
+  const tel = inputTel.value.replace(/\D/g, '');
+  const numero = tel ? `549${tel}` : '';
+  const msg = 'I allow callmebot to send me messages';
+  if (numero) {
+    btnWaSub.href = `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+  } else {
+    btnWaSub.href = `https://wa.me/+34644527697?text=${encodeURIComponent(msg)}`;
+  }
+  paso1.style.display = 'none';
+  paso2.style.display = 'block';
+});
+
+btnVolver.addEventListener('click', () => {
+  paso2.style.display = 'none';
+  paso1.style.display = 'block';
+});
+</script>

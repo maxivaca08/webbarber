@@ -1,0 +1,141 @@
+{% extends 'base_admin.html' %}
+{% block title %}Disponibilidad{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>⚙️ Gestión de disponibilidad</h2>
+</div>
+
+<!-- Formulario generar slots -->
+<div class="card" style="margin-bottom:28px">
+  <div class="card-header">➕ Generar horarios disponibles</div>
+  <div style="padding:20px">
+    <form method="post" action="{{ url_for('admin_generar_slots') }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha inicio *</label>
+          <input type="date" name="fecha_inicio" required>
+        </div>
+        <div class="form-group">
+          <label>Fecha fin *</label>
+          <input type="date" name="fecha_fin" required>
+        </div>
+        <div class="form-group">
+          <label>Hora de inicio *</label>
+          <input type="time" name="hora_inicio" value="09:00" required>
+        </div>
+        <div class="form-group">
+          <label>Hora de finalización * <span style="font-size:11px">(el último turno empieza 1h antes)</span></label>
+          <input type="time" name="hora_fin" value="18:00" required>
+        </div>
+        <div class="form-group">
+          <label>Inicio de almuerzo <span style="font-size:11px">(opcional)</span></label>
+          <input type="time" name="almuerzo_inicio" placeholder="ej: 13:00">
+        </div>
+        <div class="form-group">
+          <label>Fin de almuerzo <span style="font-size:11px">(opcional)</span></label>
+          <input type="time" name="almuerzo_fin" placeholder="ej: 14:00">
+        </div>
+        <div class="form-group full">
+          <label>Días de la semana *</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" name="dias" value="0" checked> Lunes</label>
+            <label><input type="checkbox" name="dias" value="1" checked> Martes</label>
+            <label><input type="checkbox" name="dias" value="2" checked> Miércoles</label>
+            <label><input type="checkbox" name="dias" value="3" checked> Jueves</label>
+            <label><input type="checkbox" name="dias" value="4" checked> Viernes</label>
+            <label><input type="checkbox" name="dias" value="5"> Sábado</label>
+            <label><input type="checkbox" name="dias" value="6"> Domingo</label>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button type="submit" class="btn btn-primary">⚡ Generar horarios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bloquear día completo -->
+<div class="card" style="margin-bottom:28px">
+  <div class="card-header">🚫 Bloquear día completo</div>
+  <div style="padding:16px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <form method="post" action="{{ url_for('admin_bloquear_dia') }}" style="display:flex;gap:10px;align-items:flex-end">
+      <div class="form-group">
+        <label>Fecha a bloquear</label>
+        <input type="date" name="fecha" required style="min-width:160px">
+      </div>
+      <button type="submit" class="btn btn-warning">🔒 Bloquear día</button>
+    </form>
+    <form method="post" action="{{ url_for('admin_eliminar_libres') }}" style="display:flex;gap:10px;align-items:flex-end"
+          onsubmit="return confirm('¿Eliminar todos los slots libres de ese día?')">
+      <div class="form-group">
+        <label>Fecha a limpiar</label>
+        <input type="date" name="fecha" required style="min-width:160px">
+      </div>
+      <button type="submit" class="btn btn-danger">🗑 Eliminar libres</button>
+    </form>
+  </div>
+</div>
+
+<!-- Slots por fecha -->
+<div class="page-header" style="margin-bottom:16px">
+  <h3 style="font-size:18px;font-weight:600">📋 Horarios próximos</h3>
+  <div style="display:flex;gap:12px;font-size:13px;color:var(--text-muted);align-items:center">
+    <span style="display:inline-flex;align-items:center;gap:5px">
+      <span class="slot-pill libre" style="pointer-events:none;padding:3px 10px">libre</span>
+    </span>
+    <span style="display:inline-flex;align-items:center;gap:5px">
+      <span class="slot-pill ocupado" style="pointer-events:none;padding:3px 10px">reservado</span>
+    </span>
+    <span style="display:inline-flex;align-items:center;gap:5px">
+      <span class="slot-pill bloqueado" style="pointer-events:none;padding:3px 10px">bloqueado</span>
+    </span>
+  </div>
+</div>
+
+{% if by_date %}
+  {% for fecha, slots in by_date.items() %}
+  <div class="fecha-block">
+    <div class="fecha-header">
+      <h3>{{ fecha|fecha_larga }}</h3>
+      <span>{{ slots|length }} horario{{ 's' if slots|length != 1 }}</span>
+    </div>
+    <div class="slots-row">
+      {% for s in slots %}
+        {% if s.turno_id %}
+          <!-- Ocupado: tiene turno activo -->
+          <div class="slot-pill ocupado" style="flex-direction:column;align-items:flex-start;padding:8px 14px;gap:2px">
+            <strong>{{ s.hora_inicio }} – {{ s.hora_fin }}</strong>
+            <span style="font-size:11px">{{ s.cliente_nombre }}</span>
+            {% if s.cliente_tel %}
+            <span style="font-size:11px;opacity:.7">{{ s.cliente_tel }}</span>
+            {% endif %}
+          </div>
+        {% elif s.disponible %}
+          <!-- Libre: click para bloquear -->
+          <form method="post" action="{{ url_for('admin_toggle_slot', id=s.id) }}" style="display:inline">
+            <button type="submit" class="slot-pill libre" title="Click para bloquear">
+              {{ s.hora_inicio }} – {{ s.hora_fin }} 🔓
+            </button>
+          </form>
+        {% else %}
+          <!-- Bloqueado: click para desbloquear -->
+          <form method="post" action="{{ url_for('admin_toggle_slot', id=s.id) }}" style="display:inline">
+            <button type="submit" class="slot-pill bloqueado" title="Click para desbloquear">
+              {{ s.hora_inicio }} – {{ s.hora_fin }} 🔒
+            </button>
+          </form>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <div class="icon">📭</div>
+    <p>No hay horarios cargados para los próximos días.</p>
+    <p style="font-size:13px">Usá el formulario de arriba para generar la disponibilidad.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

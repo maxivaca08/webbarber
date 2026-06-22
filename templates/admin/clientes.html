@@ -1,0 +1,44 @@
+{% extends 'base_admin.html' %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>👥 Clientes registrados</h2>
+  <span style="font-size:14px;color:var(--text-muted)">{{ clientes|length }} clientes en total</span>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Nombre</th><th>Teléfono</th><th>Email</th>
+        <th>Turnos activos</th><th>Total turnos</th><th>Registrado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ c.id }}</td>
+        <td><strong>{{ c.nombre }} {{ c.apellido }}</strong></td>
+        <td>{{ c.telefono or '—' }}</td>
+        <td style="color:var(--text-muted)">{{ c.email }}</td>
+        <td>
+          {% if c.turnos_activos > 0 %}
+            <span class="badge badge-confirmado">{{ c.turnos_activos }}</span>
+          {% else %}
+            <span style="color:var(--text-muted)">0</span>
+          {% endif %}
+        </td>
+        <td>{{ c.total_turnos }}</td>
+        <td style="color:var(--text-muted);font-size:12px">{{ c.creado_en[:10]|fecha_corta }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+          No hay clientes registrados aún.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

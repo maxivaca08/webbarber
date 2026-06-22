@@ -1,0 +1,32 @@
+---
+import '../styles/global.css';
+interface Props {
+  title: string;
+  alerts?: { cat: string; msg: string }[];
+}
+const { title, alerts = [] } = Astro.props;
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title} — BarberApp</title>
+</head>
+<body class="auth-body">
+<div class="auth-card">
+  <slot name="logo" />
+  {alerts.length > 0 && (
+    <div class="alerts">
+      {alerts.map(a => (
+        <div class={`alert alert-${a.cat}`}>
+          {a.cat === 'success' ? '✅' : a.cat === 'info' ? 'ℹ️' : '⚠️'}
+          {a.msg}
+        </div>
+      ))}
+    </div>
+  )}
+  <slot />
+</div>
+</body>
+</html>

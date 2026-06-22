@@ -1,0 +1,184 @@
+{% extends 'base_cliente.html' %}
+{% block title %}Reservar turno{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>➕ Reservar turno</h2>
+</div>
+
+{% if by_date %}
+<p style="color:var(--text-muted);margin-bottom:20px;font-size:14px">
+  Seleccioná el día y horario que prefieras. Cada turno tiene una duración de <strong>1 hora</strong>.
+</p>
+
+<form method="post" id="reserva-form" enctype="multipart/form-data">
+  <input type="hidden" name="disponibilidad_id" id="disp-input">
+
+  {% for fecha, slots in by_date.items() %}
+  <div class="fecha-block">
+    <div class="fecha-header">
+      <h3>{{ fecha|fecha_larga }}</h3>
+      <span>{{ slots|length }} horario{{ 's' if slots|length != 1 }} disponible{{ 's' if slots|length != 1 }}</span>
+    </div>
+    <div class="slots-row">
+      {% for s in slots %}
+      <button type="button"
+              class="slot-btn"
+              data-id="{{ s.id }}"
+              data-fecha="{{ fecha|fecha_larga }}"
+              data-hora="{{ s.hora_inicio }} – {{ s.hora_fin }}">
+        <span class="hora">{{ s.hora_inicio }}</span>
+        <span class="label">hasta {{ s.hora_fin }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Barra de confirmación (aparece al elegir slot) -->
+  <div class="confirm-bar" id="confirm-bar" style="display:none">
+    <p>
+      Reservar el <span class="hora-sel" id="conf-fecha">—</span>
+      a las <span class="hora-sel" id="conf-hora">—</span>
+    </p>
+    <div class="sena-box">
+      <p class="sena-title">💳 Seña obligatoria por transferencia</p>
+      <p style="font-size:14px;margin-bottom:6px">
+        Para confirmar tu turno debés realizar una transferencia de <strong>$5.000</strong> al siguiente alias:
+      </p>
+      <div class="sena-alias">josevilte2001</div>
+      <p style="font-size:13px;color:var(--text-muted)">
+        Una vez realizada la transferencia, tu solicitud quedará <strong>pendiente</strong> hasta que el administrador verifique el pago.
+      </p>
+      <label class="sena-check">
+        <input type="checkbox" name="confirmo_transferencia" id="confirmo-cb" value="1">
+        <span>Ya realicé la transferencia de $5.000</span>
+      </label>
+      <div style="margin-top:14px">
+        <label for="comprobante-input" style="display:block;font-size:14px;font-weight:600;margin-bottom:6px">
+          📎 Adjuntá el comprobante de transferencia <span style="color:var(--danger,#ef4444)">*</span>
+        </label>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Formatos aceptados: JPG, PNG, PDF, WEBP (máx. 5 MB)</p>
+        <input type="file" name="comprobante" id="comprobante-input"
+               accept=".jpg,.jpeg,.png,.pdf,.webp"
+               style="display:block;width:100%;font-size:14px;padding:8px;border:1px dashed var(--border,#374151);border-radius:8px;background:var(--surface2,#1f2937);color:var(--text,#f9fafb);cursor:pointer">
+        <p id="comprobante-error" style="display:none;color:var(--danger,#ef4444);font-size:12px;margin-top:4px"></p>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="button" class="btn btn-ghost" id="btn-deselect">✕ Cambiar</button>
+      <button type="submit" class="btn btn-success" id="btn-confirmar" disabled>✅ Enviar solicitud</button>
+    </div>
+  </div>
+</form>
+
+{% else %}
+{% if not fechas_completas %}
+<div class="empty-state">
+  <div class="icon">📭</div>
+  <p>No hay horarios disponibles por el momento.</p>
+  <p style="font-size:13px;color:var(--text-muted)">Por favor revisá más adelante o contactá a la peluquería.</p>
+</div>
+{% endif %}
+{% endif %}
+
+{% if fechas_completas %}
+<div style="margin-top:{% if by_date %}28px{% else %}0{% endif %}">
+  {% if by_date %}
+  <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;color:var(--text-muted)">
+    📋 Fechas sin turnos disponibles
+  </h3>
+  {% endif %}
+  {% for fc in fechas_completas %}
+  <div class="fecha-block">
+    <div class="fecha-header">
+      <h3>{{ fc.fecha|fecha_larga }}</h3>
+      <span style="background:var(--surface3);color:var(--text-muted);padding:3px 10px;border-radius:20px;font-size:12px">Sin disponibilidad</span>
+    </div>
+    <div style="padding:16px 20px">
+      {% if fc.en_espera %}
+      <div style="display:flex;align-items:center;gap:10px;color:var(--success,#10b981);font-size:14px;font-weight:500">
+        <span style="font-size:18px">✅</span>
+        <span>Ya estás en la lista de espera para esta fecha. Te avisaremos si se libera un turno.</span>
+      </div>
+      {% else %}
+      <p style="color:var(--text-muted);font-size:14px;margin-bottom:12px">
+        No hay turnos disponibles para esta fecha.
+      </p>
+      <form method="post" action="{{ url_for('cliente_lista_espera') }}">
+        <input type="hidden" name="fecha" value="{{ fc.fecha }}">
+        <button type="submit" class="btn btn-primary">🔔 Avisarme si se libera un turno</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const buttons   = document.querySelectorAll('.slot-btn');
+const dispInput = document.getElementById('disp-input');
+const bar       = document.getElementById('confirm-bar');
+const confFecha = document.getElementById('conf-fecha');
+const confHora  = document.getElementById('conf-hora');
+const deselect  = document.getElementById('btn-deselect');
+
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    dispInput.value = btn.dataset.id;
+    confFecha.textContent = btn.dataset.fecha;
+    confHora.textContent  = btn.dataset.hora + 'hs';
+    bar.style.display = 'flex';
+    bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+});
+
+deselect && deselect.addEventListener('click', () => {
+  buttons.forEach(b => b.classList.remove('selected'));
+  dispInput.value = '';
+  bar.style.display = 'none';
+  const cb = document.getElementById('confirmo-cb');
+  const btn = document.getElementById('btn-confirmar');
+  if (cb) cb.checked = false;
+  if (btn) btn.disabled = true;
+});
+
+const confirmoCb     = document.getElementById('confirmo-cb');
+const btnConfirmar   = document.getElementById('btn-confirmar');
+const comprobanteInput = document.getElementById('comprobante-input');
+const comprobanteError = document.getElementById('comprobante-error');
+
+const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+function actualizarBoton() {
+  const checked  = confirmoCb && confirmoCb.checked;
+  const hasFile  = comprobanteInput && comprobanteInput.files.length > 0;
+  if (btnConfirmar) btnConfirmar.disabled = !(checked && hasFile);
+}
+
+if (confirmoCb)       confirmoCb.addEventListener('change', actualizarBoton);
+if (comprobanteInput) comprobanteInput.addEventListener('change', () => {
+  const file = comprobanteInput.files[0];
+  if (file && file.size > MAX_SIZE) {
+    comprobanteError.textContent = 'El archivo supera el límite de 5 MB.';
+    comprobanteError.style.display = 'block';
+    comprobanteInput.value = '';
+  } else {
+    comprobanteError.style.display = 'none';
+  }
+  actualizarBoton();
+});
+
+// Limpiar archivo al deseleccionar turno
+deselect && deselect.addEventListener('click', () => {
+  if (comprobanteInput) comprobanteInput.value = '';
+  if (comprobanteError) comprobanteError.style.display = 'none';
+  actualizarBoton();
+}, { capture: true });
+</script>
+{% endblock %}

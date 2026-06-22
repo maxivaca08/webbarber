@@ -1,0 +1,145 @@
+---
+import ClienteLayout from '../../../layouts/ClienteLayout.astro';
+import { apiFetch } from '../../../utils/api';
+import { fechaLarga, fechaCorta } from '../../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'cliente') return Astro.redirect('/admin');
+
+const { id } = Astro.params;
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const res = await apiFetch(`/api/cliente/turnos/${id}/reprogramar`, Astro.request, {
+    method: 'POST',
+    body: JSON.stringify({ disponibilidad_id: form.get('disponibilidad_id') }),
+  });
+  const json = await res.json();
+  if (json.success) {
+    return new Response(null, { status: 302, headers: { Location: '/cliente/mis-turnos' } });
+  }
+  alerts = [{ cat: 'danger', msg: json.error ?? 'Error al reprogramar.' }];
+}
+
+const res = await apiFetch(`/api/cliente/turnos/${id}/slots`, Astro.request);
+const slotsJson = await res.json();
+if (!res.ok) {
+  if (res.status === 403) {
+    alerts = [{ cat: 'danger', msg: slotsJson.error ?? 'No es posible reprogramar este turno.' }];
+  } else {
+    return Astro.redirect('/cliente/mis-turnos');
+  }
+}
+const turno = slotsJson.turno ?? null;
+const by_date = slotsJson.by_date ?? {};
+const dates = Object.keys(by_date).sort();
+---
+<ClienteLayout title="Reprogramar turno" active="mis-turnos" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>🔄 Reprogramar turno</h2>
+    <a href="/cliente/mis-turnos" class="btn btn-ghost">← Volver</a>
+  </div>
+
+  {turno && (
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">Turno actual</div>
+      <div style="padding:16px 20px;display:flex;gap:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:13px;color:var(--text-muted)">Fecha</div>
+          <div style="font-weight:600">{fechaCorta(turno.fecha)}</div>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--text-muted)">Horario</div>
+          <div style="font-weight:600">{turno.hora_inicio} – {turno.hora_fin}hs</div>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--text-muted)">Estado</div>
+          <span class={`badge badge-${turno.estado}`}>{turno.estado}</span>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {!turno ? (
+    <div class="empty-state">
+      <div class="icon">🔒</div>
+      <a href="/cliente/mis-turnos" class="btn btn-ghost">← Volver a mis turnos</a>
+    </div>
+  ) : dates.length > 0 ? (
+    <form method="post" id="reprog-form">
+      <input type="hidden" name="disponibilidad_id" id="disp-input" />
+      <p style="color:var(--text-muted);margin-bottom:16px;font-size:14px">
+        Seleccioná el nuevo horario:
+      </p>
+
+      {dates.map(fecha => (
+        <div class="fecha-block">
+          <div class="fecha-header">
+            <h3>{fechaLarga(fecha)}</h3>
+            <span>{by_date[fecha].length} disponible{by_date[fecha].length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="slots-row">
+            {by_date[fecha].map((s: any) => (
+              <button
+                type="button"
+                class="slot-btn"
+                data-id={s.id}
+                data-fecha={fechaLarga(fecha)}
+                data-hora={`${s.hora_inicio} – ${s.hora_fin}`}
+              >
+                <span class="hora">{s.hora_inicio}</span>
+                <span class="label">hasta {s.hora_fin}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div class="confirm-bar" id="confirm-bar" style="display:none">
+        <p>
+          Nuevo turno: <span class="hora-sel" id="conf-fecha">—</span>
+          a las <span class="hora-sel" id="conf-hora">—</span>
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost" id="btn-deselect">✕ Cambiar</button>
+          <button type="submit" class="btn btn-success">✅ Confirmar cambio</button>
+        </div>
+      </div>
+    </form>
+  ) : (
+    <div class="empty-state">
+      <div class="icon">📭</div>
+      <p>No hay horarios disponibles para reprogramar.</p>
+      <a href="/cliente/mis-turnos" class="btn btn-ghost">Volver a mis turnos</a>
+    </div>
+  )}
+</ClienteLayout>
+
+<script>
+const buttons   = document.querySelectorAll<HTMLButtonElement>('.slot-btn');
+const dispInput = document.getElementById('disp-input') as HTMLInputElement;
+const bar       = document.getElementById('confirm-bar') as HTMLElement;
+const confFecha = document.getElementById('conf-fecha') as HTMLElement;
+const confHora  = document.getElementById('conf-hora') as HTMLElement;
+const deselect  = document.getElementById('btn-deselect') as HTMLButtonElement;
+
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    dispInput.value       = btn.dataset.id ?? '';
+    confFecha.textContent = btn.dataset.fecha ?? '';
+    confHora.textContent  = (btn.dataset.hora ?? '') + 'hs';
+    bar.style.display = 'flex';
+    bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+});
+deselect?.addEventListener('click', () => {
+  buttons.forEach(b => b.classList.remove('selected'));
+  dispInput.value = '';
+  bar.style.display = 'none';
+});
+</script>

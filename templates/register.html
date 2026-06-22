@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear cuenta — BarberApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+</head>
+<body class="auth-body">
+
+<div class="auth-card">
+  <div class="auth-logo">
+    <span class="icon">✂️</span>
+    <h1>Crear cuenta</h1>
+    <p>Registrate para reservar tu turno</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat == 'success' %}✅{% elif cat == 'info' %}ℹ️{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" name="nombre" value="{{ form.get('nombre','') }}" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Apellido *</label>
+        <input type="text" name="apellido" value="{{ form.get('apellido','') }}" required>
+      </div>
+      <div class="form-group">
+        <label>Teléfono</label>
+        <input type="tel" name="telefono" value="{{ form.get('telefono','') }}" placeholder="Ej: 1122334455">
+      </div>
+      <div class="form-group">
+        <label>Correo electrónico *</label>
+        <input type="email" name="email" value="{{ form.get('email','') }}" required>
+      </div>
+      <div class="form-group">
+        <label>Contraseña *</label>
+        <input type="password" name="password" required placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="form-group">
+        <label>Confirmar contraseña *</label>
+        <input type="password" name="confirm_password" required placeholder="Repetí la contraseña">
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button type="submit" class="btn btn-primary btn-block" style="padding:12px">
+        Crear cuenta
+      </button>
+    </div>
+  </form>
+
+  <div class="auth-footer" style="margin-top:16px">
+    ¿Ya tenés cuenta? <a href="{{ url_for('login') }}">Iniciar sesión</a>
+  </div>
+</div>
+
+</body>
+</html>

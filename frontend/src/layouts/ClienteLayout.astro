@@ -1,0 +1,82 @@
+---
+import '../styles/global.css';
+interface Props {
+  title: string;
+  active: string;
+  userName: string;
+  alerts?: { cat: string; msg: string }[];
+}
+const { title, active, userName, alerts = [] } = Astro.props;
+
+const navItems = [
+  { href: '/cliente', label: 'Inicio',       icon: '🏠', key: 'dashboard' },
+  { href: '/cliente/reservar', label: 'Reservar', icon: '➕', key: 'reservar' },
+  { href: '/cliente/mis-turnos', label: 'Mis turnos', icon: '📋', key: 'mis-turnos' },
+];
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title} — BarberApp</title>
+</head>
+<body class="app-body">
+
+<!-- Desktop sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">✂️</div>
+    <div>
+      <h1>BarberApp</h1>
+      <span>Mi cuenta</span>
+    </div>
+  </div>
+  <nav>
+    {navItems.map(n => (
+      <a href={n.href} class={active === n.key ? 'active' : ''}>
+        <span class="nav-icon">{n.icon}</span>
+        <span>{n.label}</span>
+      </a>
+    ))}
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <strong>{userName}</strong>
+      <span>Cliente</span>
+    </div>
+    <a href="/logout" title="Cerrar sesión">🚪</a>
+  </div>
+</aside>
+
+<!-- Mobile bottom nav -->
+<nav class="bottom-nav">
+  {navItems.map(n => (
+    <a href={n.href} class={active === n.key ? 'active' : ''}>
+      <span class="nav-icon">{n.icon}</span>
+      <span>{n.label}</span>
+    </a>
+  ))}
+  <a href="/logout">
+    <span class="nav-icon">🚪</span>
+    <span>Salir</span>
+  </a>
+</nav>
+
+<main class="main">
+  {alerts.length > 0 && (
+    <div class="alerts">
+      {alerts.map(a => (
+        <div class={`alert alert-${a.cat}`}>
+          {a.cat === 'success' ? '✅' : a.cat === 'info' ? 'ℹ️' : '⚠️'}
+          {a.msg}
+        </div>
+      ))}
+    </div>
+  )}
+  <slot />
+</main>
+
+<slot name="scripts" />
+</body>
+</html>

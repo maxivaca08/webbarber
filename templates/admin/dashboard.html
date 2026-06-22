@@ -1,0 +1,142 @@
+{% extends 'base_admin.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block head %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet'/>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Dashboard</h2>
+  <span style="font-size:13px;color:var(--text-muted)" id="fecha-hoy"></span>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">📅</div>
+    <div class="stat-info"><p>Turnos hoy</p><h3>{{ stats.turnos_hoy }}</h3></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📆</div>
+    <div class="stat-info"><p>Esta semana</p><h3>{{ stats.turnos_semana }}</h3></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🗓️</div>
+    <div class="stat-info"><p>Este mes</p><h3>{{ stats.turnos_mes }}</h3></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-info"><p>Clientes</p><h3>{{ stats.total_clientes }}</h3></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">✅</div>
+    <div class="stat-info"><p>Slots libres</p><h3>{{ stats.slots_libres }}</h3></div>
+  </div>
+  <div class="stat-card" style="border-color:{% if stats.turnos_pendientes > 0 %}#78350f{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-info">
+      <p>Pendientes de pago</p>
+      <h3 style="{% if stats.turnos_pendientes > 0 %}color:#fbbf24{% endif %}">{{ stats.turnos_pendientes }}</h3>
+    </div>
+  </div>
+</div>
+
+{% if stats.turnos_pendientes > 0 %}
+<div class="alert alert-info" style="margin-bottom:20px">
+  ⏳ Hay <strong>{{ stats.turnos_pendientes }}</strong> turno{{ 's' if stats.turnos_pendientes != 1 }} pendiente{{ 's' if stats.turnos_pendientes != 1 }} de verificación de seña.
+  <a href="{{ url_for('admin_turnos_pendientes') }}" class="btn btn-warning btn-sm" style="margin-left:12px">Ver solicitudes</a>
+</div>
+{% endif %}
+
+<!-- Turnos de hoy -->
+<div class="card">
+  <div class="card-header">
+    📅 Agenda de hoy
+    <a href="{{ url_for('admin_turnos') }}" class="btn btn-ghost btn-sm">Ver todos</a>
+  </div>
+  {% if turnos_hoy %}
+  <table>
+    <thead>
+      <tr><th>Hora</th><th>Cliente</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr>
+    </thead>
+    <tbody>
+      {% for t in turnos_hoy %}
+      <tr>
+        <td><strong>{{ t.hora_inicio }} – {{ t.hora_fin }}</strong></td>
+        <td>{{ t.cliente }}</td>
+        <td>{{ t.telefono or '—' }}</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+        <td>
+          <form method="post" action="{{ url_for('admin_cambiar_estado', id=t.id) }}"
+                style="display:inline-flex;gap:6px">
+            <select name="estado" style="padding:4px 8px;font-size:12px">
+              <option value="reservado"  {{ 'selected' if t.estado=='reservado' }}>Reservado</option>
+              <option value="confirmado" {{ 'selected' if t.estado=='confirmado' }}>Confirmado</option>
+              <option value="completado" {{ 'selected' if t.estado=='completado' }}>Completado</option>
+              <option value="cancelado"  {{ 'selected' if t.estado=='cancelado' }}>Cancelado</option>
+            </select>
+            <button class="btn btn-ghost btn-sm">Guardar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state" style="padding:32px">
+    <div class="icon">🗓️</div>
+    <p>No hay turnos agendados para hoy.</p>
+    <a href="{{ url_for('admin_disponibilidad') }}" class="btn btn-ghost btn-sm">Gestionar disponibilidad</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Próximos turnos -->
+{% if proximos %}
+<div class="card">
+  <div class="card-header">⏭️ Próximos turnos</div>
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      {% for t in proximos %}
+      <tr>
+        <td>{{ t.fecha|fecha_corta }}</td>
+        <td><strong>{{ t.hora_inicio }}</strong></td>
+        <td>{{ t.cliente }}</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Calendario -->
+<div id="calendar"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const d = new Date();
+  const dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('fecha-hoy').textContent =
+    `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} ${d.getFullYear()}`;
+
+  new FullCalendar.Calendar(document.getElementById('calendar'), {
+    initialView: 'timeGridWeek',
+    locale: 'es',
+    headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay' },
+    slotMinTime: '08:00:00',
+    slotMaxTime: '21:00:00',
+    height: 580,
+    events: '/api/turnos',
+    eventClick: info => window.location.href = '/admin/turnos'
+  }).render();
+});
+</script>
+{% endblock %}

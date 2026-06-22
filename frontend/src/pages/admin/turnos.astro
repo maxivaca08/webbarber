@@ -1,0 +1,115 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta, diaSemana } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'admin') return Astro.redirect('/cliente');
+
+const url = new URL(Astro.request.url);
+let fecha  = url.searchParams.get('fecha') ?? '';
+let estado = url.searchParams.get('estado') ?? '';
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = form.get('turno_id');
+  const nuevoEstado = form.get('estado');
+  const res = await apiFetch(`/api/admin/turnos/${id}/estado`, Astro.request, {
+    method: 'POST',
+    body: JSON.stringify({ estado: nuevoEstado }),
+  });
+  const json = await res.json();
+  alerts = [{ cat: res.ok ? 'success' : 'danger', msg: json.message ?? json.error ?? '' }];
+}
+
+const params = new URLSearchParams();
+if (fecha)  params.set('fecha', fecha);
+if (estado) params.set('estado', estado);
+const res = await apiFetch(`/api/admin/turnos?${params}`, Astro.request);
+const { turnos = [] } = res.ok ? await res.json() : {};
+---
+<AdminLayout title="Turnos" active="turnos" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>📅 Todos los turnos</h2>
+  </div>
+
+  <div class="filters">
+    <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" name="fecha" value={fecha} />
+      </div>
+      <div class="form-group">
+        <label>Estado</label>
+        <select name="estado">
+          <option value="">Todos</option>
+          <option value="reservado"  selected={estado === 'reservado'}>Reservado</option>
+          <option value="confirmado" selected={estado === 'confirmado'}>Confirmado</option>
+          <option value="completado" selected={estado === 'completado'}>Completado</option>
+          <option value="cancelado"  selected={estado === 'cancelado'}>Cancelado</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-ghost">🔍 Filtrar</button>
+      <button type="button" class="btn btn-ghost" id="btn-limpiar">✕ Limpiar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Fecha</th><th>Horario</th><th>Cliente</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr>
+        </thead>
+        <tbody>
+          {turnos.length > 0 ? turnos.map((t: any) => (
+            <tr>
+              <td style="color:var(--text-muted)">{t.id}</td>
+              <td>
+                <strong>{fechaCorta(t.fecha)}</strong>
+                <span style="color:var(--text-muted);font-size:12px;display:block">{diaSemana(t.fecha)}</span>
+              </td>
+              <td><strong>{t.hora_inicio}</strong> – {t.hora_fin}</td>
+              <td>
+                {t.cliente}
+                <span style="color:var(--text-muted);font-size:12px;display:block">{t.email}</span>
+              </td>
+              <td>{t.telefono || '—'}</td>
+              <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+              <td>
+                <form method="post" style="display:inline-flex;gap:6px">
+                  <input type="hidden" name="turno_id" value={t.id} />
+                  <select name="estado" style="padding:4px 8px;font-size:12px;min-width:120px">
+                    <option value="reservado"  selected={t.estado === 'reservado'}>Reservado</option>
+                    <option value="confirmado" selected={t.estado === 'confirmado'}>Confirmado</option>
+                    <option value="completado" selected={t.estado === 'completado'}>Completado</option>
+                    <option value="cancelado"  selected={t.estado === 'cancelado'}>Cancelado</option>
+                  </select>
+                  <button class="btn btn-ghost btn-sm">💾</button>
+                </form>
+              </td>
+            </tr>
+          )) : (
+            <tr>
+              <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+                No hay turnos con los filtros seleccionados.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+document.getElementById('btn-limpiar')?.addEventListener('click', () => {
+  const form = document.querySelector('.filters form') as HTMLFormElement;
+  (form.querySelector('input[name="fecha"]') as HTMLInputElement).value = '';
+  (form.querySelector('select[name="estado"]') as HTMLSelectElement).value = '';
+  form.submit();
+});
+</script>

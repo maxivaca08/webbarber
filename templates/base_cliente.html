@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Mi cuenta{% endblock %} — BarberApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+  {% block head %}{% endblock %}
+</head>
+<body class="app-body">
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">✂️</div>
+    <div>
+      <h1>BarberApp</h1>
+      <span>Mi cuenta</span>
+    </div>
+  </div>
+  <nav>
+    <a href="{{ url_for('cliente_dashboard') }}"
+       class="{% if request.endpoint=='cliente_dashboard' %}active{% endif %}">
+      <span class="nav-icon">🏠</span><span>Inicio</span>
+    </a>
+    <a href="{{ url_for('cliente_reservar') }}"
+       class="{% if request.endpoint=='cliente_reservar' %}active{% endif %}">
+      <span class="nav-icon">➕</span><span>Reservar turno</span>
+    </a>
+    <a href="{{ url_for('cliente_mis_turnos') }}"
+       class="{% if 'mis_turnos' in (request.endpoint or '') or 'reprogramar' in (request.endpoint or '') %}active{% endif %}">
+      <span class="nav-icon">📋</span><span>Mis turnos</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <strong>{{ session.nombre }}</strong>
+      <span>{{ session.email }}</span>
+    </div>
+    <a href="{{ url_for('logout') }}" title="Cerrar sesión">🚪</a>
+  </div>
+</aside>
+
+<main class="main">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat == 'success' %}✅{% elif cat == 'info' %}ℹ️{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,288 @@
+---
+import ClienteLayout from '../../layouts/ClienteLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaLarga } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'cliente') return Astro.redirect('/admin');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form   = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'lista_espera') {
+    const res  = await apiFetch('/api/cliente/lista-espera', Astro.request, {
+      method: 'POST',
+      body: JSON.stringify({ fecha: form.get('fecha') }),
+    });
+    const json = await res.json();
+    alerts = [{ cat: res.ok ? 'success' : (res.status === 409 ? 'info' : 'danger'),
+                msg: json.message ?? json.error ?? '' }];
+  } else {
+    const comprobante = form.get('comprobante') as File | null;
+    if (!comprobante || comprobante.size === 0) {
+      alerts = [{ cat: 'danger', msg: 'Debés adjuntar el comprobante de transferencia.' }];
+    } else {
+      const formData = new FormData();
+      formData.append('disponibilidad_id',    String(form.get('disponibilidad_id') ?? ''));
+      formData.append('confirmo_transferencia', form.get('confirmo_transferencia') === '1' ? '1' : '0');
+      formData.append('comprobante', comprobante, comprobante.name);
+
+      const res  = await apiFetch('/api/cliente/reservar', Astro.request, {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.success) {
+        return new Response(null, { status: 302, headers: { Location: '/cliente?reservado=1' } });
+      }
+      alerts = [{ cat: 'danger', msg: json.error ?? 'No se pudo reservar el turno.' }];
+    }
+  }
+}
+
+const slotsRes = await apiFetch('/api/cliente/slots', Astro.request);
+const { by_date = {}, fechas_completas = [] } = slotsRes.ok ? await slotsRes.json() : {};
+const dates = Object.keys(by_date).sort();
+---
+<ClienteLayout title="Reservar turno" active="reservar" userName={user.nombre} alerts={alerts}>
+  <div class="page-header">
+    <h2>➕ Reservar turno</h2>
+  </div>
+
+  {dates.length > 0 && (
+    <>
+      <p style="color:var(--text-muted);margin-bottom:20px;font-size:14px">
+        Seleccioná el día y horario que prefieras. Cada turno tiene una duración de <strong>1 hora</strong>.
+      </p>
+
+      <form method="post" id="reserva-form" enctype="multipart/form-data">
+        <input type="hidden" name="_action" value="reservar" />
+        <input type="hidden" name="disponibilidad_id" id="disp-input" />
+
+        {dates.map(fecha => (
+          <div class="fecha-block">
+            <div class="fecha-header">
+              <h3>{fechaLarga(fecha)}</h3>
+              <span>
+                {by_date[fecha].length} horario{by_date[fecha].length !== 1 ? 's' : ''} disponible{by_date[fecha].length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div class="slots-row">
+              {by_date[fecha].map((s: any) => (
+                <button
+                  type="button"
+                  class="slot-btn"
+                  data-id={s.id}
+                  data-fecha={fechaLarga(fecha)}
+                  data-hora={`${s.hora_inicio} – ${s.hora_fin}`}
+                >
+                  <span class="hora">{s.hora_inicio}</span>
+                  <span class="label">hasta {s.hora_fin}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div class="confirm-bar" id="confirm-bar" style="display:none">
+          <p>
+            Reservar el <span class="hora-sel" id="conf-fecha">—</span>
+            a las <span class="hora-sel" id="conf-hora">—</span>
+          </p>
+          <div class="sena-box">
+            <p class="sena-title">💳 Seña obligatoria por transferencia</p>
+            <p style="font-size:14px;margin-bottom:6px">
+              Para confirmar tu turno debés realizar una transferencia de <strong>$5.000</strong> al siguiente alias:
+            </p>
+            <div class="sena-alias">josevilte2001</div>
+            <p style="font-size:13px;color:var(--text-muted)">
+              Una vez realizada la transferencia, tu solicitud quedará <strong>pendiente</strong> hasta que el administrador verifique el pago.
+            </p>
+            <label class="sena-check">
+              <input type="checkbox" name="confirmo_transferencia" id="confirmo-cb" value="1" />
+              <span>Ya realicé la transferencia de $5.000</span>
+            </label>
+            <div style="margin-top:14px">
+              <label for="comprobante-input" style="display:block;font-size:14px;font-weight:600;margin-bottom:6px">
+                📎 Adjuntá el comprobante de transferencia <span style="color:#ef4444">*</span>
+              </label>
+              <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Formatos aceptados: JPG, PNG, PDF, WEBP (máx. 5 MB)</p>
+              <input type="file" name="comprobante" id="comprobante-input"
+                     accept=".jpg,.jpeg,.png,.pdf,.webp"
+                     style="display:block;width:100%;font-size:14px;padding:8px;border:1px dashed var(--border,#374151);border-radius:8px;background:var(--surface2,#1f2937);color:var(--text,#f9fafb);cursor:pointer" />
+              <p id="comprobante-error" style="display:none;color:#ef4444;font-size:12px;margin-top:4px"></p>
+            </div>
+
+            </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center">
+            <button type="button" class="btn btn-ghost" id="btn-deselect">✕ Cambiar</button>
+            <button type="button" id="btn-whatsapp" disabled
+                    style="display:flex;align-items:center;gap:8px;background:#25d366;color:#fff;font-weight:600;font-size:14px;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;opacity:0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              <span id="btn-whatsapp-label">Confirmar y enviar por WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </>
+  )}
+
+  {dates.length === 0 && fechas_completas.length === 0 && (
+    <div class="empty-state">
+      <div class="icon">📭</div>
+      <p>No hay horarios disponibles por el momento.</p>
+      <p style="font-size:13px;color:var(--text-muted)">Por favor revisá más adelante o contactá a la peluquería.</p>
+    </div>
+  )}
+
+  {fechas_completas.length > 0 && (
+    <div style={`margin-top:${dates.length > 0 ? '28px' : '0'}`}>
+      {dates.length > 0 && (
+        <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;color:var(--text-muted)">
+          📋 Fechas sin turnos disponibles
+        </h3>
+      )}
+      {(fechas_completas as any[]).map((fc: any) => (
+        <div class="fecha-block">
+          <div class="fecha-header">
+            <h3>{fechaLarga(fc.fecha)}</h3>
+            <span style="background:var(--surface3);color:var(--text-muted);padding:3px 10px;border-radius:20px;font-size:12px">
+              Sin disponibilidad
+            </span>
+          </div>
+          <div style="padding:16px 20px">
+            {fc.en_espera ? (
+              <div style="display:flex;align-items:center;gap:10px;color:#10b981;font-size:14px;font-weight:500">
+                <span style="font-size:18px">✅</span>
+                <span>Ya estás en la lista de espera para esta fecha. Te avisaremos si se libera un turno.</span>
+              </div>
+            ) : (
+              <>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:12px">
+                  No hay turnos disponibles para esta fecha.
+                </p>
+                <form method="post">
+                  <input type="hidden" name="_action" value="lista_espera" />
+                  <input type="hidden" name="fecha" value={fc.fecha} />
+                  <button type="submit" class="btn btn-primary">🔔 Avisarme si se libera un turno</button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</ClienteLayout>
+
+<script>
+const buttons   = document.querySelectorAll<HTMLButtonElement>('.slot-btn');
+const dispInput = document.getElementById('disp-input') as HTMLInputElement;
+const bar       = document.getElementById('confirm-bar') as HTMLElement;
+const confFecha = document.getElementById('conf-fecha') as HTMLElement;
+const confHora  = document.getElementById('conf-hora') as HTMLElement;
+const deselect  = document.getElementById('btn-deselect') as HTMLButtonElement;
+
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    dispInput.value   = btn.dataset.id ?? '';
+    confFecha.textContent = btn.dataset.fecha ?? '';
+    confHora.textContent  = (btn.dataset.hora ?? '') + 'hs';
+    bar.style.display = 'flex';
+    bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+});
+
+const confirmoCb       = document.getElementById('confirmo-cb')       as HTMLInputElement;
+const comprobanteInput = document.getElementById('comprobante-input') as HTMLInputElement;
+const comprobanteError = document.getElementById('comprobante-error') as HTMLElement;
+const btnWhatsapp      = document.getElementById('btn-whatsapp')      as HTMLButtonElement;
+const btnLabel         = document.getElementById('btn-whatsapp-label') as HTMLElement;
+const form             = document.getElementById('reserva-form')      as HTMLFormElement;
+
+const WA_NUMBER = '5493876319654';
+const MAX_SIZE  = 5 * 1024 * 1024;
+
+function actualizarUI() {
+  const checked = confirmoCb?.checked ?? false;
+  const hasFile = (comprobanteInput?.files?.length ?? 0) > 0;
+  const listo   = checked && hasFile;
+  if (btnWhatsapp) {
+    btnWhatsapp.disabled = !listo;
+    (btnWhatsapp as HTMLButtonElement).style.opacity = listo ? '1' : '0.5';
+    (btnWhatsapp as HTMLButtonElement).style.cursor  = listo ? 'pointer' : 'not-allowed';
+  }
+}
+
+deselect?.addEventListener('click', () => {
+  buttons.forEach(b => b.classList.remove('selected'));
+  dispInput.value = '';
+  bar.style.display = 'none';
+  if (confirmoCb)       confirmoCb.checked = false;
+  if (comprobanteInput) comprobanteInput.value = '';
+  if (comprobanteError) comprobanteError.style.display = 'none';
+  actualizarUI();
+});
+
+confirmoCb?.addEventListener('change', actualizarUI);
+
+comprobanteInput?.addEventListener('change', () => {
+  const file = comprobanteInput.files?.[0];
+  if (file && file.size > MAX_SIZE) {
+    comprobanteError.textContent = 'El archivo supera el límite de 5 MB.';
+    comprobanteError.style.display = 'block';
+    comprobanteInput.value = '';
+  } else {
+    comprobanteError.style.display = 'none';
+  }
+  actualizarUI();
+});
+
+btnWhatsapp?.addEventListener('click', async () => {
+  if (btnWhatsapp.disabled) return;
+
+  const fecha = confFecha?.textContent ?? '';
+  const hora  = confHora?.textContent  ?? '';
+
+  // Deshabilitar mientras se envía
+  btnWhatsapp.disabled = true;
+  btnWhatsapp.style.opacity = '0.7';
+  if (btnLabel) btnLabel.textContent = 'Enviando...';
+
+  try {
+    const formData = new FormData(form);
+    const res  = await fetch('/api/cliente/reservar', { method: 'POST', body: formData });
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      if (btnLabel) btnLabel.textContent = 'Confirmar y enviar por WhatsApp';
+      btnWhatsapp.disabled = false;
+      btnWhatsapp.style.opacity = '1';
+      alert(json.error ?? 'No se pudo registrar la reserva. Intentá de nuevo.');
+      return;
+    }
+
+    // Registro exitoso → abrir WhatsApp
+    const msg = `Hola! Reservé un turno para el ${fecha} a las ${hora}. Te mando el comprobante de la seña de $5.000. ¿Me lo podés confirmar? ¡Gracias!`;
+    window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+
+    // Redirigir al dashboard con mensaje de éxito
+    window.location.href = '/cliente?reservado=1';
+
+  } catch {
+    if (btnLabel) btnLabel.textContent = 'Confirmar y enviar por WhatsApp';
+    btnWhatsapp.disabled = false;
+    btnWhatsapp.style.opacity = '1';
+    alert('Error de red. Verificá tu conexión e intentá de nuevo.');
+  }
+});
+</script>

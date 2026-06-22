@@ -1,0 +1,14 @@
+---
+import { apiFetch } from '../utils/api';
+
+await apiFetch('/api/auth/logout', Astro.request, { method: 'POST' });
+
+// Clear the session cookie by returning an expired one
+return new Response(null, {
+  status: 302,
+  headers: {
+    Location: '/login',
+    'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly',
+  },
+});
+---

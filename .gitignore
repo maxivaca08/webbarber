@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Base de datos
+*.db
+
+# Archivos subidos por usuarios
+static/comprobantes/
+
+# Node / Astro
+frontend/node_modules/
+frontend/dist/
+frontend/.astro/
+
+# Claude
+.claude/

@@ -1,0 +1,68 @@
+{% extends 'base_cliente.html' %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Hola, {{ session.nombre }} 👋</h2>
+  <a href="{{ url_for('cliente_reservar') }}" class="btn btn-primary">➕ Reservar turno</a>
+</div>
+
+<!-- Próximos turnos -->
+<div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+  <h3 style="font-size:17px;font-weight:600">📅 Próximos turnos</h3>
+  <a href="{{ url_for('cliente_mis_turnos') }}" style="font-size:13px;color:var(--accent-light);text-decoration:none">
+    Ver historial →
+  </a>
+</div>
+
+{% if proximos %}
+  {% for t in proximos %}
+  <div class="turno-card">
+    <div>
+      <div class="turno-fecha">{{ t.fecha[8:10] }}/{{ t.fecha[5:7] }}/{{ t.fecha[:4] }}</div>
+      <div class="turno-dia">{{ t.fecha|dia_semana }}</div>
+      <div class="turno-hora">{{ t.hora_inicio }} – {{ t.hora_fin }}hs</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-{{ t.estado }}">{{ t.estado }}</span>
+      {% if t.estado in ('reservado', 'confirmado') %}
+      <a href="{{ url_for('cliente_reprogramar', id=t.id) }}" class="btn btn-ghost btn-sm">🔄 Reprogramar</a>
+      <form method="post" action="{{ url_for('cliente_cancelar', id=t.id) }}"
+            onsubmit="return confirm('¿Cancelar este turno?')">
+        <button class="btn btn-danger btn-sm">✕ Cancelar</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <div class="icon">✂️</div>
+    <p>No tenés turnos próximos.</p>
+    <a href="{{ url_for('cliente_reservar') }}" class="btn btn-primary">Reservar ahora</a>
+  </div>
+{% endif %}
+
+<!-- Historial reciente -->
+{% if historial %}
+<div style="margin-top:32px;margin-bottom:8px">
+  <h3 style="font-size:17px;font-weight:600">📋 Historial reciente</h3>
+</div>
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Horario</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      {% for t in historial %}
+      <tr>
+        <td>{{ t.fecha|fecha_corta }} <span style="color:var(--text-muted);font-size:12px">{{ t.fecha|dia_semana }}</span></td>
+        <td>{{ t.hora_inicio }} – {{ t.hora_fin }}</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

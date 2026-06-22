@@ -1,0 +1,11 @@
+---
+import { apiFetch } from '../utils/api';
+
+const res = await apiFetch('/api/auth/me', Astro.request);
+if (res.ok) {
+  const user = await res.json();
+  if (user.rol === 'admin') return Astro.redirect('/admin');
+  return Astro.redirect('/cliente');
+}
+return Astro.redirect('/login');
+---

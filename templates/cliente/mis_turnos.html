@@ -1,0 +1,60 @@
+{% extends 'base_cliente.html' %}
+{% block title %}Mis turnos{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>📋 Mis turnos</h2>
+  <a href="{{ url_for('cliente_reservar') }}" class="btn btn-primary">➕ Nuevo turno</a>
+</div>
+
+{% if turnos %}
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Horario</th><th>Estado</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for t in turnos %}
+      <tr>
+        <td>
+          <strong>{{ t.fecha|fecha_corta }}</strong><br>
+          <span style="font-size:12px;color:var(--text-muted)">{{ t.fecha|dia_semana }}</span>
+        </td>
+        <td><strong>{{ t.hora_inicio }}</strong> – {{ t.hora_fin }}hs</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+        <td class="actions">
+          {% if t.estado == 'pendiente' %}
+            <span style="font-size:12px;color:#fbbf24;display:block;margin-bottom:6px">⏳ Pendiente de verificación de pago</span>
+            <form method="post" action="{{ url_for('cliente_cancelar', id=t.id) }}"
+                  onsubmit="return confirm('¿Cancelar esta solicitud?')">
+              <button class="btn btn-danger btn-sm">✕ Cancelar solicitud</button>
+            </form>
+          {% elif t.estado == 'rechazado' %}
+            <span style="font-size:12px;color:#f87171">❌ Seña no verificada — turno rechazado</span>
+          {% elif t.estado in ('reservado', 'confirmado') and t.fecha >= hoy %}
+            {% if t.puede_reprogramar %}
+              <a href="{{ url_for('cliente_reprogramar', id=t.id) }}" class="btn btn-ghost btn-sm">🔄 Reprogramar</a>
+            {% else %}
+              <span class="btn btn-ghost btn-sm" style="opacity:.45;cursor:not-allowed" title="No es posible reprogramar cuando faltan 8 horas o menos para el turno">🔄 Reprogramar</span>
+            {% endif %}
+            <form method="post" action="{{ url_for('cliente_cancelar', id=t.id) }}"
+                  onsubmit="return confirm('¿Cancelar este turno?')">
+              <button class="btn btn-danger btn-sm">✕ Cancelar</button>
+            </form>
+          {% else %}
+            <span style="font-size:12px;color:var(--text-muted)">Sin acciones</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">✂️</div>
+  <p>Todavía no tenés ningún turno.</p>
+  <a href="{{ url_for('cliente_reservar') }}" class="btn btn-primary">Reservar ahora</a>
+</div>
+{% endif %}
+
+{% endblock %}

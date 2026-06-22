@@ -1,0 +1,75 @@
+{% extends 'base_admin.html' %}
+{% block title %}Turnos{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>📅 Todos los turnos</h2>
+</div>
+
+<div class="filters">
+  <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div class="form-group">
+      <label>Fecha</label>
+      <input type="date" name="fecha" value="{{ filtro_fecha }}">
+    </div>
+    <div class="form-group">
+      <label>Estado</label>
+      <select name="estado">
+        <option value="">Todos</option>
+        <option value="reservado"  {{ 'selected' if filtro_estado=='reservado' }}>Reservado</option>
+        <option value="confirmado" {{ 'selected' if filtro_estado=='confirmado' }}>Confirmado</option>
+        <option value="completado" {{ 'selected' if filtro_estado=='completado' }}>Completado</option>
+        <option value="cancelado"  {{ 'selected' if filtro_estado=='cancelado' }}>Cancelado</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-ghost">🔍 Filtrar</button>
+    <a href="{{ url_for('admin_turnos') }}" class="btn btn-ghost">✕ Limpiar</a>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Fecha</th><th>Horario</th><th>Cliente</th>
+        <th>Teléfono</th><th>Estado</th><th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in turnos %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ t.id }}</td>
+        <td>
+          <strong>{{ t.fecha|fecha_corta }}</strong><br>
+          <span style="font-size:12px;color:var(--text-muted)">{{ t.fecha|dia_semana }}</span>
+        </td>
+        <td><strong>{{ t.hora_inicio }}</strong> – {{ t.hora_fin }}</td>
+        <td>
+          {{ t.cliente }}<br>
+          <span style="font-size:12px;color:var(--text-muted)">{{ t.email }}</span>
+        </td>
+        <td>{{ t.telefono or '—' }}</td>
+        <td><span class="badge badge-{{ t.estado }}">{{ t.estado }}</span></td>
+        <td>
+          <form method="post" action="{{ url_for('admin_cambiar_estado', id=t.id) }}"
+                style="display:inline-flex;gap:6px">
+            <select name="estado" style="padding:4px 8px;font-size:12px;min-width:120px">
+              <option value="reservado"  {{ 'selected' if t.estado=='reservado' }}>Reservado</option>
+              <option value="confirmado" {{ 'selected' if t.estado=='confirmado' }}>Confirmado</option>
+              <option value="completado" {{ 'selected' if t.estado=='completado' }}>Completado</option>
+              <option value="cancelado"  {{ 'selected' if t.estado=='cancelado' }}>Cancelado</option>
+            </select>
+            <button class="btn btn-ghost btn-sm">💾</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+          No hay turnos con los filtros seleccionados.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

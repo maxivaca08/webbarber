@@ -1,0 +1,169 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { apiFetch } from '../../utils/api';
+import { fechaCorta } from '../../utils/format';
+
+const meRes = await apiFetch('/api/auth/me', Astro.request);
+if (!meRes.ok) return Astro.redirect('/login');
+const user = await meRes.json();
+if (user.rol !== 'admin') return Astro.redirect('/cliente');
+
+let alerts: { cat: string; msg: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = form.get('turno_id');
+  const estado = form.get('estado');
+  const res = await apiFetch(`/api/admin/turnos/${id}/estado`, Astro.request, {
+    method: 'POST',
+    body: JSON.stringify({ estado }),
+  });
+  const json = await res.json();
+  alerts = [{ cat: res.ok ? 'success' : 'danger', msg: json.message ?? json.error ?? '' }];
+}
+
+const dashRes = await apiFetch('/api/admin/dashboard', Astro.request);
+const { stats = {}, turnos_hoy = [], proximos = [] } = dashRes.ok ? await dashRes.json() : {};
+---
+<AdminLayout title="Dashboard" active="dashboard" userName={user.nombre} alerts={alerts}>
+  <Fragment slot="head">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  </Fragment>
+
+  <div class="page-header">
+    <h2>Dashboard</h2>
+    <span style="font-size:13px;color:var(--text-muted)" id="fecha-hoy"></span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">📅</div>
+      <div class="stat-info"><p>Turnos hoy</p><h3>{stats.turnos_hoy ?? 0}</h3></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📆</div>
+      <div class="stat-info"><p>Esta semana</p><h3>{stats.turnos_semana ?? 0}</h3></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🗓️</div>
+      <div class="stat-info"><p>Este mes</p><h3>{stats.turnos_mes ?? 0}</h3></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-info"><p>Clientes</p><h3>{stats.total_clientes ?? 0}</h3></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-info"><p>Slots libres</p><h3>{stats.slots_libres ?? 0}</h3></div>
+    </div>
+    <div class="stat-card" style={(stats.turnos_pendientes ?? 0) > 0 ? 'border-color:#78350f' : ''}>
+      <div class="stat-icon">⏳</div>
+      <div class="stat-info">
+        <p>Pendientes de pago</p>
+        <h3 style={(stats.turnos_pendientes ?? 0) > 0 ? 'color:#fbbf24' : ''}>{stats.turnos_pendientes ?? 0}</h3>
+      </div>
+    </div>
+  </div>
+
+  {(stats.turnos_pendientes ?? 0) > 0 && (
+    <div class="alert alert-info" style="margin-bottom:20px">
+      ⏳ Hay <strong>{stats.turnos_pendientes}</strong> turno{stats.turnos_pendientes !== 1 ? 's' : ''} pendiente{stats.turnos_pendientes !== 1 ? 's' : ''} de verificación de seña.
+      <a href="/admin/pendientes" class="btn btn-warning btn-sm" style="margin-left:12px">Ver solicitudes</a>
+    </div>
+  )}
+
+  <!-- Agenda de hoy -->
+  <div class="card">
+    <div class="card-header">
+      📅 Agenda de hoy
+      <a href="/admin/turnos" class="btn btn-ghost btn-sm">Ver todos</a>
+    </div>
+    {turnos_hoy.length > 0 ? (
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Hora</th><th>Cliente</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr>
+          </thead>
+          <tbody>
+            {turnos_hoy.map((t: any) => (
+              <tr>
+                <td><strong>{t.hora_inicio} – {t.hora_fin}</strong></td>
+                <td>{t.cliente}</td>
+                <td>{t.telefono || '—'}</td>
+                <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+                <td>
+                  <form method="post" style="display:inline-flex;gap:6px">
+                    <input type="hidden" name="turno_id" value={t.id} />
+                    <select name="estado" style="padding:4px 8px;font-size:12px;min-width:120px">
+                      <option value="reservado"  selected={t.estado === 'reservado'}>Reservado</option>
+                      <option value="confirmado" selected={t.estado === 'confirmado'}>Confirmado</option>
+                      <option value="completado" selected={t.estado === 'completado'}>Completado</option>
+                      <option value="cancelado"  selected={t.estado === 'cancelado'}>Cancelado</option>
+                    </select>
+                    <button class="btn btn-ghost btn-sm">💾</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div class="empty-state" style="padding:32px">
+        <div class="icon">🗓️</div>
+        <p>No hay turnos agendados para hoy.</p>
+        <a href="/admin/disponibilidad" class="btn btn-ghost btn-sm">Gestionar disponibilidad</a>
+      </div>
+    )}
+  </div>
+
+  {proximos.length > 0 && (
+    <div class="card">
+      <div class="card-header">⏭️ Próximos turnos</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            {proximos.map((t: any) => (
+              <tr>
+                <td>{fechaCorta(t.fecha)}</td>
+                <td><strong>{t.hora_inicio}</strong></td>
+                <td>{t.cliente}</td>
+                <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
+
+  <div id="calendar"></div>
+</AdminLayout>
+
+<Fragment slot="scripts">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const d = new Date();
+      const dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+      const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      const el = document.getElementById('fecha-hoy');
+      if (el) el.textContent = `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} ${d.getFullYear()}`;
+
+      // @ts-ignore
+      new FullCalendar.Calendar(document.getElementById('calendar'), {
+        initialView: window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek',
+        locale: 'es',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+        slotMinTime: '08:00:00',
+        slotMaxTime: '21:00:00',
+        height: 520,
+        events: '/api/turnos',
+        eventClick: () => { window.location.href = '/admin/turnos'; }
+      }).render();
+    });
+  </script>
+</Fragment>

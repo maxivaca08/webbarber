@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión — BarberApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+</head>
+<body class="auth-body">
+
+<div class="auth-card">
+  <div class="auth-logo">
+    <span class="icon">✂️</span>
+    <h1>BarberApp</h1>
+    <p>Sistema de turnos para tu peluquería</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat == 'success' %}✅{% elif cat == 'info' %}ℹ️{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" autocomplete="on">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div class="form-group">
+        <label>Correo electrónico</label>
+        <input type="email" name="email" placeholder="tu@email.com" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" name="password" placeholder="••••••••" required>
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button type="submit" class="btn btn-primary btn-block" style="padding:12px">
+        Iniciar sesión
+      </button>
+    </div>
+  </form>
+
+  <div class="auth-footer" style="margin-top:16px">
+    ¿No tenés cuenta? <a href="{{ url_for('register') }}">Registrarse</a>
+  </div>
+</div>
+
+</body>
+</html>
