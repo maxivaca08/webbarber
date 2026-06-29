@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+import { apiFetch } from '../utils/api';
+
 interface Props {
   title: string;
   active: string;
@@ -8,12 +10,15 @@ interface Props {
 }
 const { title, active, userName, alerts = [] } = Astro.props;
 
+const notifRes = await apiFetch('/api/admin/notificaciones', Astro.request);
+const { reprogramados = 0 } = notifRes.ok ? await notifRes.json() : {};
+
 const navItems = [
-  { href: '/admin', label: 'Dashboard',      icon: '🏠', key: 'dashboard' },
-  { href: '/admin/turnos', label: 'Turnos',  icon: '📅', key: 'turnos' },
-  { href: '/admin/clientes', label: 'Clientes', icon: '👥', key: 'clientes' },
-  { href: '/admin/disponibilidad', label: 'Disponibilidad', icon: '⚙️', key: 'disponibilidad' },
-  { href: '/admin/pendientes', label: 'Pendientes', icon: '⏳', key: 'pendientes' },
+  { href: '/admin',               label: 'Dashboard',      icon: '🏠', key: 'dashboard', badge: 0 },
+  { href: '/admin/turnos',        label: 'Turnos',         icon: '📅', key: 'turnos',    badge: reprogramados },
+  { href: '/admin/clientes',      label: 'Clientes',       icon: '👥', key: 'clientes',  badge: 0 },
+  { href: '/admin/disponibilidad',label: 'Disponibilidad', icon: '⚙️', key: 'disponibilidad', badge: 0 },
+  { href: '/admin/pendientes',    label: 'Pendientes',     icon: '⏳', key: 'pendientes', badge: 0 },
 ];
 ---
 <!doctype html>
@@ -37,9 +42,14 @@ const navItems = [
   </div>
   <nav>
     {navItems.map(n => (
-      <a href={n.href} class={active === n.key ? 'active' : ''}>
+      <a href={n.href} class={active === n.key ? 'active' : ''} style="position:relative">
         <span class="nav-icon">{n.icon}</span>
         <span>{n.label}</span>
+        {n.badge > 0 && (
+          <span style="position:absolute;top:6px;right:10px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;line-height:16px">
+            {n.badge}
+          </span>
+        )}
       </a>
     ))}
   </nav>
@@ -55,9 +65,14 @@ const navItems = [
 <!-- Mobile bottom nav -->
 <nav class="bottom-nav">
   {navItems.map(n => (
-    <a href={n.href} class={active === n.key ? 'active' : ''}>
+    <a href={n.href} class={active === n.key ? 'active' : ''} style="position:relative">
       <span class="nav-icon">{n.icon}</span>
       <span>{n.label}</span>
+      {n.badge > 0 && (
+        <span style="position:absolute;top:4px;right:4px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;line-height:15px">
+          {n.badge}
+        </span>
+      )}
     </a>
   ))}
   <a href="/logout">

@@ -591,7 +591,7 @@ def admin_dashboard():
         FROM turnos t
         JOIN usuarios u ON t.cliente_id=u.id
         JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha > ? AND t.estado NOT IN ('cancelado')
+        WHERE d.fecha > ? AND t.estado = 'confirmado'
         ORDER BY d.fecha, d.hora_inicio
         LIMIT 8
     ''', (hoy_str,)).fetchall()
@@ -1231,7 +1231,7 @@ def api_cliente_reprogramar(id):
         disp_viejo = db.execute(
             'SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?', (turno['disponibilidad_id'],)
         ).fetchone()
-        db.execute('UPDATE turnos SET disponibilidad_id=?, estado=? WHERE id=?',
+        db.execute('UPDATE turnos SET disponibilidad_id=?, estado=?, reprogramado_sin_ver=1 WHERE id=?',
                    (nueva_disp, 'reservado', id))
         db.execute('UPDATE disponibilidad SET disponible=1 WHERE id=?', (turno['disponibilidad_id'],))
         db.execute('UPDATE disponibilidad SET disponible=0 WHERE id=?', (nueva_disp,))
@@ -1246,6 +1246,25 @@ def api_cliente_reprogramar(id):
         return json_err('El horario seleccionado ya fue tomado. Elegí otro.')
 
 # ── Admin API ──────────────────────────────────────────────────────────────────
+
+@app.route('/api/admin/notificaciones')
+@api_admin
+def api_admin_notificaciones():
+    db = get_db()
+    reprogramados = db.execute(
+        'SELECT COUNT(*) FROM turnos WHERE reprogramado_sin_ver=1'
+    ).fetchone()[0]
+    db.close()
+    return json_ok({'reprogramados': reprogramados})
+
+@app.route('/api/admin/notificaciones/marcar-visto', methods=['POST'])
+@api_admin
+def api_admin_marcar_visto():
+    db = get_db()
+    db.execute('UPDATE turnos SET reprogramado_sin_ver=0 WHERE reprogramado_sin_ver=1')
+    db.commit()
+    db.close()
+    return json_ok({'message': 'OK'})
 
 @app.route('/api/admin/dashboard')
 @api_admin
@@ -1293,7 +1312,7 @@ def api_admin_dashboard():
         FROM turnos t
         JOIN usuarios u ON t.cliente_id=u.id
         JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha > ? AND t.estado NOT IN ('cancelado')
+        WHERE d.fecha > ? AND t.estado = 'confirmado'
         ORDER BY d.fecha, d.hora_inicio LIMIT 8
     ''', (hoy_str,)).fetchall()]
 
@@ -1308,7 +1327,8 @@ def api_admin_turnos():
     estado = request.args.get('estado', '')
 
     q = '''SELECT t.id, u.nombre||' '||u.apellido AS cliente, u.telefono, u.email,
-                  d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.notas, t.creado_en
+                  d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.notas, t.creado_en,
+                  t.reprogramado_sin_ver
            FROM turnos t
            JOIN usuarios u ON t.cliente_id=u.id
            JOIN disponibilidad d ON t.disponibilidad_id=d.id WHERE 1=1'''

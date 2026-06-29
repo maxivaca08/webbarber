@@ -14,6 +14,9 @@ let estado = url.searchParams.get('estado') ?? '';
 
 let alerts: { cat: string; msg: string }[] = [];
 
+// Marcar reprogramados como vistos al entrar a esta página
+await apiFetch('/api/admin/notificaciones/marcar-visto', Astro.request, { method: 'POST' });
+
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const id = form.get('turno_id');
@@ -66,7 +69,7 @@ const { turnos = [] } = res.ok ? await res.json() : {};
         </thead>
         <tbody>
           {turnos.length > 0 ? turnos.map((t: any) => (
-            <tr>
+            <tr style={t.reprogramado_sin_ver ? 'background:rgba(234,179,8,0.08);border-left:3px solid #eab308' : ''}>
               <td style="color:var(--text-muted)">{t.id}</td>
               <td>
                 <strong>{fechaCorta(t.fecha)}</strong>
@@ -78,7 +81,12 @@ const { turnos = [] } = res.ok ? await res.json() : {};
                 <span style="color:var(--text-muted);font-size:12px;display:block">{t.email}</span>
               </td>
               <td>{t.telefono || '—'}</td>
-              <td><span class={`badge badge-${t.estado}`}>{t.estado}</span></td>
+              <td>
+                <span class={`badge badge-${t.estado}`}>{t.estado}</span>
+                {t.reprogramado_sin_ver && (
+                  <span style="display:block;font-size:11px;color:#eab308;font-weight:600;margin-top:3px">🔄 Reprogramado</span>
+                )}
+              </td>
               <td>
                 <form method="post" style="display:inline-flex;gap:6px">
                   <input type="hidden" name="turno_id" value={t.id} />

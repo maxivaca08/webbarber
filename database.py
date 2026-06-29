@@ -76,6 +76,13 @@ def init_db():
             db.execute('ALTER TABLE turnos ADD COLUMN recordatorio_enviado INTEGER NOT NULL DEFAULT 0')
             db.commit()
 
+    # Migración: notificación al admin cuando un cliente reprograma
+    if 'turnos' in tables:
+        cols = {r[1] for r in db.execute("PRAGMA table_info(turnos)").fetchall()}
+        if 'reprogramado_sin_ver' not in cols:
+            db.execute('ALTER TABLE turnos ADD COLUMN reprogramado_sin_ver INTEGER NOT NULL DEFAULT 0')
+            db.commit()
+
     # Migración: agregar callmebot_key y telegram_user en usuarios
     if 'usuarios' in tables:
         cols = {r[1] for r in db.execute("PRAGMA table_info(usuarios)").fetchall()}
