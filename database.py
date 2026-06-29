@@ -76,11 +76,14 @@ def init_db():
             db.execute('ALTER TABLE turnos ADD COLUMN recordatorio_enviado INTEGER NOT NULL DEFAULT 0')
             db.commit()
 
-    # Migración: agregar callmebot_key en usuarios
+    # Migración: agregar callmebot_key y telegram_user en usuarios
     if 'usuarios' in tables:
         cols = {r[1] for r in db.execute("PRAGMA table_info(usuarios)").fetchall()}
         if 'callmebot_key' not in cols:
             db.execute('ALTER TABLE usuarios ADD COLUMN callmebot_key TEXT')
+            db.commit()
+        if 'telegram_user' not in cols:
+            db.execute('ALTER TABLE usuarios ADD COLUMN telegram_user TEXT')
             db.commit()
 
     db.executescript('''
@@ -131,13 +134,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_espera_fecha   ON lista_espera(fecha);
     ''')
 
-    # Seed: único administrador
+    # Seed: admin y cliente por defecto
     if db.execute("SELECT COUNT(*) FROM usuarios WHERE rol='admin'").fetchone()[0] == 0:
         db.execute(
             "INSERT INTO usuarios (nombre, apellido, email, password_hash, rol) "
             "VALUES (?,?,?,?,?)",
-            ('Admin', 'Barbería', 'admin@barberapp.com',
-             generate_password_hash('admin123'), 'admin')
+            ('Maximiliano', 'Vaca', 'maxivaca2304@gmail.com',
+             generate_password_hash('ferre0811'), 'admin')
         )
         db.commit()
 

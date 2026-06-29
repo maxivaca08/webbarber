@@ -969,6 +969,7 @@ def api_register():
     password      = data.get('password') or ''
     confirm       = data.get('confirm_password') or ''
     callmebot_key = (data.get('callmebot_key') or '').strip() or None
+    telegram_user = (data.get('telegram_user') or '').strip().lstrip('@') or None
 
     if not nombre or not apellido or not telefono or not email or not password:
         return json_err('Completá todos los campos obligatorios.')
@@ -983,9 +984,9 @@ def api_register():
         return json_err('Ya existe una cuenta con ese email.')
 
     db.execute(
-        'INSERT INTO usuarios (nombre, apellido, telefono, email, password_hash, rol, callmebot_key) '
-        'VALUES (?,?,?,?,?,?,?)',
-        (nombre, apellido, telefono, email, generate_password_hash(password), 'cliente', callmebot_key)
+        'INSERT INTO usuarios (nombre, apellido, telefono, email, password_hash, rol, callmebot_key, telegram_user) '
+        'VALUES (?,?,?,?,?,?,?,?)',
+        (nombre, apellido, telefono, email, generate_password_hash(password), 'cliente', callmebot_key, telegram_user)
     )
     db.commit()
     db.close()

@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / 'peluqueria.db'
-CALLMEBOT_URL = 'https://api.callmebot.com/whatsapp.php'
+CALLMEBOT_URL = 'https://api.callmebot.com/telegram.php'
 # Cuántas horas antes del día del turno se manda el recordatorio
 HORAS_ANTES = 24
 
@@ -23,16 +23,16 @@ def get_db():
     return con
 
 
-def mandar_recordatorio(telefono: str, callmebot_key: str, nombre: str,
+def mandar_recordatorio(telegram_user: str, callmebot_key: str, nombre: str,
                         fecha_str: str, hora_inicio: str, hora_fin: str) -> bool:
-    """Llama a la API de CallMeBot. Devuelve True si el envío fue exitoso."""
+    """Llama a la API de CallMeBot Telegram. Devuelve True si el envío fue exitoso."""
+    from datetime import datetime
     dias = {
         'Monday': 'lunes', 'Tuesday': 'martes', 'Wednesday': 'miércoles',
         'Thursday': 'jueves', 'Friday': 'viernes', 'Saturday': 'sábado',
         'Sunday': 'domingo',
     }
-    from datetime import datetime
-    fecha_dt  = datetime.strptime(fecha_str, '%Y-%m-%d')
+    fecha_dt   = datetime.strptime(fecha_str, '%Y-%m-%d')
     dia_nombre = dias.get(fecha_dt.strftime('%A'), fecha_dt.strftime('%A'))
     fecha_fmt  = fecha_dt.strftime(f'{dia_nombre} %d/%m')
 
@@ -44,20 +44,17 @@ def mandar_recordatorio(telefono: str, callmebot_key: str, nombre: str,
         f"Si necesitás reprogramar, podés hacerlo hasta 8 horas antes desde la app."
     )
 
-    # CallMeBot requiere el número sin + ni espacios, con código de país
-    numero = telefono.replace('+', '').replace(' ', '').replace('-', '')
-    if not numero.startswith('549') and not numero.startswith('54'):
-        numero = '549' + numero
+    user = telegram_user if telegram_user.startswith('@') else f'@{telegram_user}'
 
     try:
         resp = requests.get(
             CALLMEBOT_URL,
-            params={'phone': numero, 'text': mensaje, 'apikey': callmebot_key},
+            params={'user': user, 'text': mensaje, 'apikey': callmebot_key},
             timeout=15,
         )
         return resp.status_code == 200
     except requests.RequestException as e:
-        print(f'  [ERROR] Falló la llamada a CallMeBot: {e}')
+        print(f'  [ERROR] Falló la llamada a CallMeBot Telegram: {e}')
         return False
 
 
@@ -67,7 +64,7 @@ def procesar():
 
     pendientes = db.execute('''
         SELECT t.id,
-               u.nombre, u.telefono, u.callmebot_key,
+               u.nombre, u.telegram_user, u.callmebot_key,
                d.fecha, d.hora_inicio, d.hora_fin
         FROM turnos t
         JOIN usuarios u ON t.cliente_id = u.id
@@ -77,8 +74,8 @@ def procesar():
           AND d.fecha = ?
           AND u.callmebot_key IS NOT NULL
           AND u.callmebot_key != ''
-          AND u.telefono IS NOT NULL
-          AND u.telefono != ''
+          AND u.telegram_user IS NOT NULL
+          AND u.telegram_user != ''
     ''', (manana,)).fetchall()
 
     if not pendientes:
@@ -89,9 +86,9 @@ def procesar():
     print(f'[{date.today()}] Enviando {len(pendientes)} recordatorio(s)...')
 
     for t in pendientes:
-        print(f'  → {t["nombre"]} ({t["telefono"]}) — {t["fecha"]} {t["hora_inicio"]}')
+        print(f'  → {t["nombre"]} (@{t["telegram_user"]}) — {t["fecha"]} {t["hora_inicio"]}')
         ok = mandar_recordatorio(
-            telefono=t['telefono'],
+            telegram_user=t['telegram_user'],
             callmebot_key=t['callmebot_key'],
             nombre=t['nombre'],
             fecha_str=t['fecha'],
