@@ -961,15 +961,13 @@ def api_login():
 
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
-    data          = request.get_json(force=True) or {}
-    nombre        = (data.get('nombre') or '').strip()
-    apellido      = (data.get('apellido') or '').strip()
-    telefono      = (data.get('telefono') or '').strip()
-    email         = (data.get('email') or '').strip().lower()
-    password      = data.get('password') or ''
-    confirm       = data.get('confirm_password') or ''
-    callmebot_key = (data.get('callmebot_key') or '').strip() or None
-    telegram_user = (data.get('telegram_user') or '').strip().lstrip('@') or None
+    data     = request.get_json(force=True) or {}
+    nombre   = (data.get('nombre') or '').strip()
+    apellido = (data.get('apellido') or '').strip()
+    telefono = (data.get('telefono') or '').strip()
+    email    = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    confirm  = data.get('confirm_password') or ''
 
     if not nombre or not apellido or not telefono or not email or not password:
         return json_err('Completá todos los campos obligatorios.')
@@ -984,9 +982,9 @@ def api_register():
         return json_err('Ya existe una cuenta con ese email.')
 
     db.execute(
-        'INSERT INTO usuarios (nombre, apellido, telefono, email, password_hash, rol, callmebot_key, telegram_user) '
-        'VALUES (?,?,?,?,?,?,?,?)',
-        (nombre, apellido, telefono, email, generate_password_hash(password), 'cliente', callmebot_key, telegram_user)
+        'INSERT INTO usuarios (nombre, apellido, telefono, email, password_hash, rol) '
+        'VALUES (?,?,?,?,?,?)',
+        (nombre, apellido, telefono, email, generate_password_hash(password), 'cliente')
     )
     db.commit()
     db.close()

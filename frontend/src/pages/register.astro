@@ -11,12 +11,10 @@ let formValues: Record<string, string> = {};
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   formValues = {
-    nombre:        String(form.get('nombre') ?? ''),
-    apellido:      String(form.get('apellido') ?? ''),
-    telefono:      String(form.get('telefono') ?? ''),
-    email:         String(form.get('email') ?? ''),
-    callmebot_key: String(form.get('callmebot_key') ?? ''),
-    telegram_user: String(form.get('telegram_user') ?? ''),
+    nombre:   String(form.get('nombre') ?? ''),
+    apellido: String(form.get('apellido') ?? ''),
+    telefono: String(form.get('telefono') ?? ''),
+    email:    String(form.get('email') ?? ''),
   };
 
   const res = await apiFetch('/api/auth/register', Astro.request, {
@@ -41,90 +39,37 @@ if (Astro.request.method === 'POST') {
     <p>Registrate para reservar tu turno</p>
   </div>
 
-  <form method="post" id="register-form">
-    <!-- Paso 1: datos de la cuenta -->
-    <div id="paso-1">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Nombre *</label>
-          <input type="text" name="nombre" value={formValues.nombre ?? ''} required autofocus />
-        </div>
-        <div class="form-group">
-          <label>Apellido *</label>
-          <input type="text" name="apellido" value={formValues.apellido ?? ''} required />
-        </div>
-        <div class="form-group">
-          <label>Teléfono * (con código de área, sin 0 ni 15)</label>
-          <input type="tel" name="telefono" id="input-telefono" value={formValues.telefono ?? ''} placeholder="Ej: 3876319654" required />
-        </div>
-        <div class="form-group">
-          <label>Correo electrónico *</label>
-          <input type="email" name="email" value={formValues.email ?? ''} required />
-        </div>
-        <div class="form-group">
-          <label>Contraseña *</label>
-          <input type="password" name="password" required placeholder="Mínimo 6 caracteres" />
-        </div>
-        <div class="form-group">
-          <label>Confirmar contraseña *</label>
-          <input type="password" name="confirm_password" required placeholder="Repetí la contraseña" />
-        </div>
+  <form method="post">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" name="nombre" value={formValues.nombre ?? ''} required autofocus />
       </div>
-      <div style="margin-top:20px">
-        <button type="button" id="btn-siguiente" class="btn btn-primary btn-block" style="padding:14px">
-          Siguiente →
-        </button>
+      <div class="form-group">
+        <label>Apellido *</label>
+        <input type="text" name="apellido" value={formValues.apellido ?? ''} required />
+      </div>
+      <div class="form-group">
+        <label>Teléfono * (con código de área, sin 0 ni 15)</label>
+        <input type="tel" name="telefono" value={formValues.telefono ?? ''} placeholder="Ej: 3876319654" required />
+      </div>
+      <div class="form-group">
+        <label>Correo electrónico *</label>
+        <input type="email" name="email" value={formValues.email ?? ''} required />
+      </div>
+      <div class="form-group">
+        <label>Contraseña *</label>
+        <input type="password" name="password" required placeholder="Mínimo 6 caracteres" />
+      </div>
+      <div class="form-group">
+        <label>Confirmar contraseña *</label>
+        <input type="password" name="confirm_password" required placeholder="Repetí la contraseña" />
       </div>
     </div>
-
-    <!-- Paso 2: activar recordatorios por WhatsApp -->
-    <div id="paso-2" style="display:none">
-      <div style="background:var(--surface2,#1f2937);border-radius:12px;padding:20px;margin-bottom:20px">
-        <p style="font-size:15px;font-weight:600;margin-bottom:6px">📲 Recordatorios por WhatsApp (opcional)</p>
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
-          Podés recibir un recordatorio automático 24hs antes de tu turno. Solo necesitás hacer este paso una vez.
-        </p>
-
-        <p style="font-size:13px;font-weight:600;margin-bottom:8px">Paso 1 — Abrí Telegram y buscá el bot:</p>
-        <a href="https://t.me/CallMeBot_txtbot"
-           target="_blank"
-           rel="noopener"
-           style="display:inline-flex;align-items:center;gap:8px;background:#229ED9;color:#fff;font-weight:600;font-size:13px;padding:9px 14px;border-radius:8px;text-decoration:none;margin-bottom:16px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-          </svg>
-          Abrir @CallMeBot_txtbot en Telegram
-        </a>
-
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
-          Una vez dentro del bot, mandá el comando <code style="background:var(--surface,#111827);padding:2px 6px;border-radius:4px">/start</code> y el bot te va a responder con tu API key.
-        </p>
-
-        <p style="font-size:13px;font-weight:600;margin-bottom:6px">Paso 2 — Ingresá tu usuario de Telegram:</p>
-        <input type="text" name="telegram_user" id="input-telegram-user"
-               value={formValues.telegram_user ?? ''}
-               placeholder="Ej: @tunombre"
-               style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--surface,#111827);color:var(--text,#f9fafb);font-size:14px;margin-bottom:10px" />
-
-        <p style="font-size:13px;font-weight:600;margin-bottom:6px">Paso 3 — Pegá la API key que te mandó el bot:</p>
-        <input type="text" name="callmebot_key" id="input-callmebot-key"
-               value={formValues.callmebot_key ?? ''}
-               placeholder="Ej: 123456"
-               style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--surface,#111827);color:var(--text,#f9fafb);font-size:14px" />
-
-        <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
-          Si no tenés Telegram o querés hacerlo después, podés saltear este paso.
-        </p>
-      </div>
-
-      <div style="display:flex;gap:10px">
-        <button type="button" id="btn-volver" class="btn btn-ghost" style="flex:1;padding:12px">
-          ← Volver
-        </button>
-        <button type="submit" class="btn btn-primary" style="flex:2;padding:12px">
-          Crear cuenta
-        </button>
-      </div>
+    <div style="margin-top:20px">
+      <button type="submit" class="btn btn-primary btn-block" style="padding:14px">
+        Crear cuenta
+      </button>
     </div>
   </form>
 
@@ -132,25 +77,3 @@ if (Astro.request.method === 'POST') {
     ¿Ya tenés cuenta? <a href="/login">Iniciar sesión</a>
   </div>
 </AuthLayout>
-
-<script>
-const paso1     = document.getElementById('paso-1')!;
-const paso2     = document.getElementById('paso-2')!;
-const btnSig    = document.getElementById('btn-siguiente')!;
-const btnVolver = document.getElementById('btn-volver')!;
-
-btnSig.addEventListener('click', () => {
-  const form = document.getElementById('register-form') as HTMLFormElement;
-  if (!form.checkValidity()) {
-    form.reportValidity();
-    return;
-  }
-  paso1.style.display = 'none';
-  paso2.style.display = 'block';
-});
-
-btnVolver.addEventListener('click', () => {
-  paso2.style.display = 'none';
-  paso1.style.display = 'block';
-});
-</script>
