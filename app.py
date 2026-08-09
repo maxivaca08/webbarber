@@ -11,7 +11,7 @@ except ImportError:
 from database import init_db, get_db, close_db
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import sqlite3
 import os
 import uuid
@@ -59,6 +59,23 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 DIAS_ES  = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 MESES_ES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
             'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+# ── Zona horaria local del negocio ───────────────────────────────────────────
+# El servidor (p. ej. Railway) corre en UTC; sin esto la app calcula "ahora" en
+# UTC y oculta turnos que todavía no pasaron. Argentina es UTC-3 fijo (no tiene
+# horario de verano). Ajustable con TZ_OFFSET si se usa en otra región.
+LOCAL_TZ = timezone(timedelta(hours=int(os.getenv('TZ_OFFSET', '-3'))))
+
+
+def now_local():
+    """Ahora en hora local, como datetime naive (para comparar con los horarios
+    guardados, que son strings de hora local sin zona)."""
+    return datetime.now(LOCAL_TZ).replace(tzinfo=None)
+
+
+def today_local():
+    """Fecha de hoy en hora local."""
+    return datetime.now(LOCAL_TZ).date()
 
 
 def _enviar_email_espera(to_email, nombre, fecha, hora_inicio):
@@ -140,7 +157,7 @@ def _verificar_rechazos_pendientes(db, uid):
 def _puede_reprogramar(fecha_str, hora_inicio_str):
     """True si faltan más de 8 horas para el inicio del turno."""
     turno_dt = datetime.strptime(f"{fecha_str} {hora_inicio_str}", '%Y-%m-%d %H:%M')
-    return datetime.now() < turno_dt - timedelta(hours=8)
+    return now_local() < turno_dt - timedelta(hours=8)
 
 
 def _slot_pasado(fecha_str, hora_inicio_str):
@@ -149,7 +166,7 @@ def _slot_pasado(fecha_str, hora_inicio_str):
         inicio = datetime.strptime(f"{fecha_str} {hora_inicio_str}", '%Y-%m-%d %H:%M')
     except (ValueError, TypeError):
         return False
-    return inicio <= datetime.now()
+    return inicio <= now_local()
 
 
 def _generar_slots_del_dia(hora_ini_str, hora_fin_str,
@@ -278,7 +295,7 @@ def api_logout():
 def api_cliente_dashboard():
     db  = get_db()
     uid = session['user_id']
-    hoy = date.today().isoformat()
+    hoy = today_local().isoformat()
 
     proximos = [dict(r) for r in db.execute('''
         SELECT t.id, d.fecha, d.hora_inicio, d.hora_fin, t.estado
@@ -304,8 +321,8 @@ def api_cliente_dashboard():
 @api_cliente
 def api_cliente_slots():
     db    = get_db()
-    hoy   = date.today().isoformat()
-    ahora = datetime.now().strftime('%H:%M')
+    hoy   = today_local().isoformat()
+    ahora = now_local().strftime('%H:%M')
     uid   = session['user_id']
 
     # (d.fecha > hoy OR d.hora_inicio > ahora): excluye horarios de hoy que ya pasaron.
@@ -424,7 +441,7 @@ def api_cliente_lista_espera():
 @api_cliente
 def api_cliente_mis_turnos():
     db  = get_db()
-    hoy = date.today().isoformat()
+    hoy = today_local().isoformat()
     rows = db.execute('''
         SELECT t.id, d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.creado_en
         FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id
@@ -465,8 +482,8 @@ def api_cliente_cancelar(id):
 @api_cliente
 def api_cliente_reprogramar_slots(id):
     db    = get_db()
-    hoy   = date.today().isoformat()
-    ahora = datetime.now().strftime('%H:%M')
+    hoy   = today_local().isoformat()
+    ahora = now_local().strftime('%H:%M')
 
     turno = db.execute('''
         SELECT t.*, d.fecha, d.hora_inicio, d.hora_fin, d.id AS disp_id
@@ -579,9 +596,9 @@ def api_admin_marcar_visto():
 def api_admin_dashboard():
     from datetime import datetime as dt
     db      = get_db()
-    hoy     = date.today()
+    hoy     = today_local()
     hoy_str = hoy.isoformat()
-    ahora   = dt.now().strftime('%H:%M')
+    ahora   = now_local().strftime('%H:%M')
 
     # Permitir consultar otra fecha via ?fecha=YYYY-MM-DD
     fecha_param = request.args.get('fecha', '')
@@ -634,7 +651,7 @@ def api_admin_dashboard():
         if prox_row:
             proximo = dict(prox_row)
             turno_dt = dt.strptime(f"{hoy_str} {proximo['hora_inicio']}", '%Y-%m-%d %H:%M')
-            proximo['minutos_restantes'] = max(0, int((turno_dt - dt.now()).total_seconds() / 60))
+            proximo['minutos_restantes'] = max(0, int((turno_dt - now_local()).total_seconds() / 60))
 
     # Próximos turnos confirmados (días posteriores a la fecha consultada)
     proximos = [dict(r) for r in db.execute('''
@@ -739,7 +756,7 @@ def api_admin_resetear_password(id):
 @api_admin
 def api_admin_disponibilidad():
     db  = get_db()
-    hoy = date.today().isoformat()
+    hoy = today_local().isoformat()
 
     slots = db.execute('''
         SELECT d.*,
