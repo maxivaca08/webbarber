@@ -1,15 +1,46 @@
 import sqlite3
 import os
+import secrets
 from werkzeug.security import generate_password_hash
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'peluqueria.db')
+# DATA_DIR: carpeta donde vive la base. En local es el directorio del proyecto;
+# en producción se apunta al volumen persistente (p. ej. /data en Railway) para
+# que la base NO se borre en cada deploy.
+DATA_DIR = os.environ.get('DATA_DIR') or os.path.dirname(__file__)
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, 'peluqueria.db')
 
-def get_db():
+def _connect():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
     conn.execute('PRAGMA journal_mode = WAL')
     return conn
+
+def get_db():
+    """Devuelve una conexión SQLite.
+
+    Dentro de un request Flask la conexión se cachea en `g` y su cierre queda
+    garantizado por `close_db` (registrado como teardown), incluso si la vista
+    lanza una excepción antes del `db.close()` explícito. Fuera de contexto de
+    aplicación (p. ej. hilos de fondo de la lista de espera) devuelve una
+    conexión suelta que el llamador debe cerrar."""
+    try:
+        from flask import g, has_app_context
+    except ImportError:
+        return _connect()
+    if not has_app_context():
+        return _connect()
+    if 'db' not in g:
+        g.db = _connect()
+    return g.db
+
+def close_db(e=None):
+    """Cierra la conexión cacheada en `g` al final del request (teardown)."""
+    from flask import g
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
 def init_db():
     db = get_db()
@@ -69,28 +100,11 @@ def init_db():
             db.execute('ALTER TABLE turnos ADD COLUMN comprobante_path TEXT')
             db.commit()
 
-    # Migración: agregar recordatorio_enviado para no mandar dos veces
-    if 'turnos' in tables:
-        cols = {r[1] for r in db.execute("PRAGMA table_info(turnos)").fetchall()}
-        if 'recordatorio_enviado' not in cols:
-            db.execute('ALTER TABLE turnos ADD COLUMN recordatorio_enviado INTEGER NOT NULL DEFAULT 0')
-            db.commit()
-
     # Migración: notificación al admin cuando un cliente reprograma
     if 'turnos' in tables:
         cols = {r[1] for r in db.execute("PRAGMA table_info(turnos)").fetchall()}
         if 'reprogramado_sin_ver' not in cols:
             db.execute('ALTER TABLE turnos ADD COLUMN reprogramado_sin_ver INTEGER NOT NULL DEFAULT 0')
-            db.commit()
-
-    # Migración: agregar callmebot_key y telegram_user en usuarios
-    if 'usuarios' in tables:
-        cols = {r[1] for r in db.execute("PRAGMA table_info(usuarios)").fetchall()}
-        if 'callmebot_key' not in cols:
-            db.execute('ALTER TABLE usuarios ADD COLUMN callmebot_key TEXT')
-            db.commit()
-        if 'telegram_user' not in cols:
-            db.execute('ALTER TABLE usuarios ADD COLUMN telegram_user TEXT')
             db.commit()
 
     db.executescript('''
@@ -141,13 +155,24 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_espera_fecha   ON lista_espera(fecha);
     ''')
 
-    # Seed: admin y cliente por defecto
+    # Seed: admin por defecto. Credenciales por variable de entorno;
+    # si no hay ADMIN_PASSWORD se genera una temporal y se muestra una sola vez.
     if db.execute("SELECT COUNT(*) FROM usuarios WHERE rol='admin'").fetchone()[0] == 0:
+        admin_email  = os.getenv('ADMIN_EMAIL', 'admin@barberapp.com')
+        admin_nombre = os.getenv('ADMIN_NOMBRE', 'Admin')
+        admin_pass   = os.getenv('ADMIN_PASSWORD')
+        if not admin_pass:
+            admin_pass = secrets.token_urlsafe(12)
+            print('=' * 60)
+            print('[init] Admin creado con contraseña temporal.')
+            print(f'[init]   Email:      {admin_email}')
+            print(f'[init]   Contraseña: {admin_pass}')
+            print('[init] Cambiala e idealmente definí ADMIN_PASSWORD por entorno.')
+            print('=' * 60)
         db.execute(
             "INSERT INTO usuarios (nombre, apellido, email, password_hash, rol) "
             "VALUES (?,?,?,?,?)",
-            ('Maximiliano', 'Vaca', 'maxivaca2304@gmail.com',
-             generate_password_hash('ferre0811'), 'admin')
+            (admin_nombre, '', admin_email, generate_password_hash(admin_pass), 'admin')
         )
         db.commit()
 

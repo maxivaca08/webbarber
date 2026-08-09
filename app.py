@@ -1,11 +1,17 @@
-from flask import (Flask, render_template, request, redirect,
-                   url_for, jsonify, flash, session, send_from_directory, abort)
-from database import init_db, get_db
+from flask import Flask, request, jsonify, session, send_from_directory, abort
+
+# Carga opcional de variables desde un archivo .env (si python-dotenv está
+# instalado). No es obligatorio: si falta, se usan las variables del entorno.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from database import init_db, get_db, close_db
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 from functools import wraps
 from datetime import datetime, date, timedelta
-from collections import defaultdict
 import sqlite3
 import os
 import uuid
@@ -15,8 +21,20 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__)
-app.secret_key = 'barberapp_secret_2024_#xK9'
+# Clave de sesión: obligatoria por variable de entorno en producción.
+# El fallback es solo para desarrollo local (invalida sesiones al reiniciar).
+app.secret_key = os.environ.get('SECRET_KEY') or 'dev-only-insecure-key-change-me'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB
+
+# Cookie de sesión: HttpOnly siempre; Secure solo en producción (HTTPS).
+# Poné COOKIE_SECURE=1 cuando la app corra detrás de HTTPS.
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE']   = os.environ.get('COOKIE_SECURE') == '1'
+
+# Cierre garantizado de la conexión SQLite al terminar cada request,
+# incluso si la vista lanza una excepción (evita conexiones colgadas / locks).
+app.teardown_appcontext(close_db)
 
 # ── Configuración de email (ajustar vía variables de entorno) ─────────────────
 EMAIL_HOST     = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
@@ -27,14 +45,20 @@ EMAIL_FROM     = os.getenv('EMAIL_FROM', EMAIL_USER) or 'noreply@barberapp.com'
 APP_URL        = os.getenv('APP_URL', 'http://localhost:4321')
 
 # ── Seña obligatoria por transferencia ─────────────────────────────────────
-SENA_ALIAS = 'josevilte2001'
-SENA_MONTO = 5000
+SENA_ALIAS = os.getenv('SENA_ALIAS', 'josevilte2001')
+SENA_MONTO = int(os.getenv('SENA_MONTO', '8000'))
 
 # ── Comprobantes de transferencia ────────────────────────────────────────────
-UPLOAD_FOLDER         = os.path.join(os.path.dirname(__file__), 'static', 'comprobantes')
-ALLOWED_EXTENSIONS    = {'jpg', 'jpeg', 'png', 'pdf', 'webp'}
-MAX_CONTENT_LENGTH    = 5 * 1024 * 1024  # 5 MB
+# DATA_DIR: mismo volumen persistente que usa la base (ver database.py). Los
+# comprobantes se guardan ahí para que sobrevivan a los deploys en producción.
+DATA_DIR           = os.environ.get('DATA_DIR') or os.path.dirname(__file__)
+UPLOAD_FOLDER      = os.path.join(DATA_DIR, 'static', 'comprobantes')
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'pdf', 'webp'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+DIAS_ES  = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+MESES_ES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+            'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 
 def _enviar_email_espera(to_email, nombre, fecha, hora_inicio):
@@ -119,8 +143,17 @@ def _puede_reprogramar(fecha_str, hora_inicio_str):
     return datetime.now() < turno_dt - timedelta(hours=8)
 
 
+def _slot_pasado(fecha_str, hora_inicio_str):
+    """True si el horario ya empezó o pasó (no se puede reservar más)."""
+    try:
+        inicio = datetime.strptime(f"{fecha_str} {hora_inicio_str}", '%Y-%m-%d %H:%M')
+    except (ValueError, TypeError):
+        return False
+    return inicio <= datetime.now()
+
+
 def _generar_slots_del_dia(hora_ini_str, hora_fin_str,
-                            almuerzo_ini_str=None, almuerzo_fin_str=None):
+                           almuerzo_ini_str=None, almuerzo_fin_str=None):
     """Devuelve lista de tuplas (inicio, fin) de 1 hora para un día.
     Salta slots que se superponen con el horario de almuerzo (opcional)."""
     fmt = '%H:%M'
@@ -141,774 +174,16 @@ def _generar_slots_del_dia(hora_ini_str, hora_fin_str,
         current = slot_end
     return slots
 
-DIAS_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-MESES_ES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-             'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
-
-@app.template_filter('dia_semana')
-def dia_semana_filter(fecha_str):
-    d = datetime.strptime(fecha_str, '%Y-%m-%d')
-    return DIAS_ES[d.weekday()]
-
-@app.template_filter('fecha_larga')
-def fecha_larga_filter(fecha_str):
-    d = datetime.strptime(fecha_str, '%Y-%m-%d')
-    return f"{DIAS_ES[d.weekday()]} {d.day} de {MESES_ES[d.month]}"
-
-@app.template_filter('fecha_corta')
-def fecha_corta_filter(fecha_str):
-    d = datetime.strptime(fecha_str, '%Y-%m-%d')
-    return f"{d.day:02d}/{d.month:02d}/{d.year}"
-
-# ── Decoradores ──────────────────────────────────────────────────────────────
-
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated
-
-def admin_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        if session.get('rol') != 'admin':
-            flash('Acceso no autorizado.', 'danger')
-            return redirect(url_for('cliente_dashboard'))
-        return f(*args, **kwargs)
-    return decorated
-
-def cliente_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        if session.get('rol') != 'cliente':
-            return redirect(url_for('admin_dashboard'))
-        return f(*args, **kwargs)
-    return decorated
-
-# ── Auth ─────────────────────────────────────────────────────────────────────
-
-@app.route('/')
-def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    if session.get('rol') == 'admin':
-        return redirect(url_for('admin_dashboard'))
-    return redirect(url_for('cliente_dashboard'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if 'user_id' in session:
-        return redirect(url_for('index'))
-
-    if request.method == 'POST':
-        email    = request.form['email'].strip().lower()
-        password = request.form['password']
-        db   = get_db()
-        user = db.execute('SELECT * FROM usuarios WHERE email=?', (email,)).fetchone()
-        db.close()
-
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            session['rol']     = user['rol']
-            session['nombre']  = user['nombre']
-            session['email']   = user['email']
-            flash(f'Bienvenido, {user["nombre"]}!', 'success')
-            return redirect(url_for('admin_dashboard') if user['rol'] == 'admin'
-                            else url_for('cliente_dashboard'))
-
-        flash('Email o contraseña incorrectos.', 'danger')
-
-    return render_template('login.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if 'user_id' in session:
-        return redirect(url_for('index'))
-
-    form_data = {}
-    if request.method == 'POST':
-        form_data = request.form.to_dict()
-        nombre   = request.form['nombre'].strip()
-        apellido = request.form['apellido'].strip()
-        telefono = request.form['telefono'].strip()
-        email    = request.form['email'].strip().lower()
-        password = request.form['password']
-        confirm  = request.form['confirm_password']
-
-        if password != confirm:
-            flash('Las contraseñas no coinciden.', 'danger')
-            return render_template('register.html', form=form_data)
-        if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
-            return render_template('register.html', form=form_data)
-
-        db = get_db()
-        if db.execute('SELECT id FROM usuarios WHERE email=?', (email,)).fetchone():
-            db.close()
-            flash('Ya existe una cuenta con ese email.', 'danger')
-            return render_template('register.html', form=form_data)
-
-        db.execute(
-            'INSERT INTO usuarios (nombre, apellido, telefono, email, password_hash, rol) '
-            'VALUES (?,?,?,?,?,?)',
-            (nombre, apellido, telefono, email, generate_password_hash(password), 'cliente')
-        )
-        db.commit()
-        db.close()
-        flash('¡Cuenta creada! Iniciá sesión para reservar tu turno.', 'success')
-        return redirect(url_for('login'))
-
-    return render_template('register.html', form=form_data)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-# ── Panel Cliente ─────────────────────────────────────────────────────────────
-
-@app.route('/cliente')
-@cliente_required
-def cliente_dashboard():
-    db  = get_db()
-    uid = session['user_id']
-    hoy = date.today().isoformat()
-
-    proximos = db.execute('''
-        SELECT t.id, d.fecha, d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.cliente_id=? AND d.fecha >= ?
-          AND t.estado NOT IN ('cancelado','completado','rechazado')
-        ORDER BY d.fecha, d.hora_inicio
-    ''', (uid, hoy)).fetchall()
-
-    historial = db.execute('''
-        SELECT t.id, d.fecha, d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.cliente_id=? AND (d.fecha < ? OR t.estado IN ('cancelado','completado','rechazado'))
-        ORDER BY d.fecha DESC, d.hora_inicio DESC
-        LIMIT 10
-    ''', (uid, hoy)).fetchall()
-
-    for msg in _verificar_rechazos_pendientes(db, uid):
-        flash(msg, 'danger')
-
-    db.close()
-    return render_template('cliente/dashboard.html',
-                           proximos=proximos, historial=historial)
-
-@app.route('/cliente/reservar', methods=['GET', 'POST'])
-@cliente_required
-def cliente_reservar():
-    db  = get_db()
-    uid = session['user_id']
-    hoy = date.today().isoformat()
-
-    if request.method == 'POST':
-        disp_id = request.form.get('disponibilidad_id', '').strip()
-        if not disp_id:
-            flash('Seleccioná un horario.', 'danger')
-            return redirect(url_for('cliente_reservar'))
-
-        if not request.form.get('confirmo_transferencia'):
-            flash('Debés confirmar que realizaste la transferencia de la seña para reservar el turno.', 'danger')
-            return redirect(url_for('cliente_reservar'))
-
-        comprobante_path = None
-        archivo = request.files.get('comprobante')
-        if not archivo or archivo.filename == '':
-            flash('Debés adjuntar el comprobante de transferencia.', 'danger')
-            return redirect(url_for('cliente_reservar'))
-        ext = archivo.filename.rsplit('.', 1)[-1].lower() if '.' in archivo.filename else ''
-        if ext not in ALLOWED_EXTENSIONS:
-            flash('Formato de comprobante no permitido. Usá JPG, PNG, PDF o WEBP.', 'danger')
-            return redirect(url_for('cliente_reservar'))
-        filename = f"{uuid.uuid4().hex}.{ext}"
-        archivo.save(os.path.join(UPLOAD_FOLDER, filename))
-        comprobante_path = f"comprobantes/{filename}"
-
-        try:
-            # Integridad: UNIQUE en disponibilidad_id evita doble reserva
-            db.execute(
-                'INSERT INTO turnos (cliente_id, disponibilidad_id, estado, comprobante_path) VALUES (?,?,?,?)',
-                (uid, disp_id, 'pendiente', comprobante_path)
-            )
-            db.execute('UPDATE disponibilidad SET disponible=0 WHERE id=? AND disponible=1',
-                       (disp_id,))
-            db.commit()
-            db.close()
-            flash('¡Solicitud registrada! Tu turno quedará pendiente hasta que el '
-                  'administrador verifique la transferencia.', 'success')
-            return redirect(url_for('cliente_dashboard'))
-
-        except sqlite3.IntegrityError:
-            db.close()
-            flash('Este horario acaba de ser tomado por otro usuario. '
-                  'Por favor seleccioná otro.', 'danger')
-            return redirect(url_for('cliente_reservar'))
-
-    # GET: mostrar slots disponibles agrupados por fecha
-    slots = db.execute('''
-        SELECT d.id, d.fecha, d.hora_inicio, d.hora_fin
-        FROM disponibilidad d
-        WHERE d.disponible=1 AND d.fecha >= ?
-          AND d.id NOT IN (
-              SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado')
-          )
-        ORDER BY d.fecha, d.hora_inicio
-    ''', (hoy,)).fetchall()
-
-    by_date = defaultdict(list)
-    for s in slots:
-        by_date[s['fecha']].append(s)
-
-    # Fechas con slots pero sin disponibilidad (para lista de espera)
-    fechas_completas = [dict(r) for r in db.execute('''
-        SELECT DISTINCT d.fecha,
-               CASE WHEN le.id IS NOT NULL THEN 1 ELSE 0 END AS en_espera
-        FROM disponibilidad d
-        LEFT JOIN lista_espera le ON le.fecha = d.fecha AND le.usuario_id = ?
-        WHERE d.fecha >= ?
-          AND d.fecha NOT IN (
-              SELECT DISTINCT d2.fecha FROM disponibilidad d2
-              WHERE d2.disponible=1 AND d2.fecha >= ?
-                AND d2.id NOT IN (
-                    SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado')
-                )
-          )
-        ORDER BY d.fecha
-    ''', (uid, hoy, hoy)).fetchall()]
-
-    db.close()
-    return render_template('cliente/reservar.html',
-                           by_date=dict(sorted(by_date.items())),
-                           fechas_completas=fechas_completas)
-
-@app.route('/cliente/mis-turnos')
-@cliente_required
-def cliente_mis_turnos():
-    db  = get_db()
-    hoy = date.today().isoformat()
-    rows = db.execute('''
-        SELECT t.id, d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.creado_en
-        FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.cliente_id=?
-        ORDER BY d.fecha DESC, d.hora_inicio DESC
-    ''', (session['user_id'],)).fetchall()
-    db.close()
-    turnos = []
-    for r in rows:
-        t = dict(r)
-        t['puede_reprogramar'] = _puede_reprogramar(r['fecha'], r['hora_inicio'])
-        turnos.append(t)
-    return render_template('cliente/mis_turnos.html', turnos=turnos, hoy=hoy)
-
-@app.route('/cliente/turnos/<int:id>/cancelar', methods=['POST'])
-@cliente_required
-def cliente_cancelar(id):
-    db    = get_db()
-    turno = db.execute(
-        'SELECT * FROM turnos WHERE id=? AND cliente_id=?',
-        (id, session['user_id'])
-    ).fetchone()
-
-    if not turno:
-        db.close()
-        flash('Turno no encontrado.', 'danger')
-        return redirect(url_for('cliente_mis_turnos'))
-
-    if turno['estado'] in ('cancelado', 'completado', 'rechazado'):
-        db.close()
-        flash('Este turno no puede cancelarse.', 'info')
-        return redirect(url_for('cliente_mis_turnos'))
-
-    disp = db.execute('SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?',
-                      (turno['disponibilidad_id'],)).fetchone()
-    db.execute("UPDATE turnos SET estado='cancelado' WHERE id=?", (id,))
-    db.execute('UPDATE disponibilidad SET disponible=1 WHERE id=?',
-               (turno['disponibilidad_id'],))
-    db.commit()
-    db.close()
-    if disp:
-        _notificar_lista_espera(disp['fecha'], disp['hora_inicio'])
-    flash('Turno cancelado. El horario quedó libre nuevamente.', 'info')
-    return redirect(url_for('cliente_mis_turnos'))
-
-@app.route('/cliente/lista-espera', methods=['POST'])
-@cliente_required
-def cliente_lista_espera():
-    fecha = request.form.get('fecha', '').strip()
-    if not fecha:
-        flash('Fecha inválida.', 'danger')
-        return redirect(url_for('cliente_reservar'))
-
-    db  = get_db()
-    uid = session['user_id']
-    try:
-        db.execute('INSERT INTO lista_espera (usuario_id, fecha) VALUES (?,?)', (uid, fecha))
-        db.commit()
-        flash('¡Listo! Te avisaremos por email si se libera un turno para ese día.', 'success')
-    except sqlite3.IntegrityError:
-        flash('Ya estás anotado en la lista de espera para esa fecha.', 'info')
-    finally:
-        db.close()
-    return redirect(url_for('cliente_reservar'))
-
-
-@app.route('/cliente/turnos/<int:id>/reprogramar', methods=['GET', 'POST'])
-@cliente_required
-def cliente_reprogramar(id):
-    db    = get_db()
-    uid   = session['user_id']
-    hoy   = date.today().isoformat()
-
-    turno = db.execute('''
-        SELECT t.*, d.fecha, d.hora_inicio, d.hora_fin, d.id AS disp_id
-        FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.id=? AND t.cliente_id=?
-    ''', (id, uid)).fetchone()
-
-    if not turno or turno['estado'] in ('cancelado', 'completado', 'pendiente', 'rechazado'):
-        db.close()
-        flash('Turno no disponible para reprogramar.', 'danger')
-        return redirect(url_for('cliente_mis_turnos'))
-
-    if not _puede_reprogramar(turno['fecha'], turno['hora_inicio']):
-        db.close()
-        flash('No es posible reprogramar un turno cuando faltan 8 horas o menos para su inicio.', 'danger')
-        return redirect(url_for('cliente_mis_turnos'))
-
-    if request.method == 'POST':
-        nueva_disp = request.form.get('disponibilidad_id', '').strip()
-        if not nueva_disp:
-            flash('Seleccioná un horario.', 'danger')
-            return redirect(url_for('cliente_reprogramar', id=id))
-
-        try:
-            disp_viejo = db.execute(
-                'SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?', (turno['disp_id'],)
-            ).fetchone()
-            db.execute(
-                'UPDATE turnos SET disponibilidad_id=?, estado=? WHERE id=?',
-                (nueva_disp, 'reservado', id)
-            )
-            db.execute('UPDATE disponibilidad SET disponible=1 WHERE id=?',
-                       (turno['disp_id'],))
-            db.execute('UPDATE disponibilidad SET disponible=0 WHERE id=?',
-                       (nueva_disp,))
-            db.commit()
-            db.close()
-            if disp_viejo:
-                _notificar_lista_espera(disp_viejo['fecha'], disp_viejo['hora_inicio'])
-            flash('Turno reprogramado exitosamente.', 'success')
-            return redirect(url_for('cliente_mis_turnos'))
-
-        except sqlite3.IntegrityError:
-            db.rollback()
-            db.close()
-            flash('El horario seleccionado ya fue tomado. Elegí otro.', 'danger')
-            return redirect(url_for('cliente_reprogramar', id=id))
-
-    # GET: slots disponibles (excluye el actual)
-    slots = db.execute('''
-        SELECT d.id, d.fecha, d.hora_inicio, d.hora_fin
-        FROM disponibilidad d
-        WHERE d.disponible=1 AND d.fecha >= ? AND d.id != ?
-          AND d.id NOT IN (
-              SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado')
-          )
-        ORDER BY d.fecha, d.hora_inicio
-    ''', (hoy, turno['disp_id'])).fetchall()
-
-    by_date = defaultdict(list)
-    for s in slots:
-        by_date[s['fecha']].append(s)
-
-    db.close()
-    return render_template('cliente/reprogramar.html',
-                           turno=turno, by_date=dict(sorted(by_date.items())))
-
-# ── Panel Admin ───────────────────────────────────────────────────────────────
-
-@app.route('/admin')
-@admin_required
-def admin_dashboard():
-    db  = get_db()
-    hoy = date.today()
-
-    semana_fin = (hoy + timedelta(days=6)).isoformat()
-    mes_inicio = hoy.replace(day=1).isoformat()
-    prox_mes   = (hoy.replace(day=28) + timedelta(days=4))
-    mes_fin    = prox_mes.replace(day=1).isoformat()
-    hoy_str    = hoy.isoformat()
-
-    stats = {
-        'turnos_hoy': db.execute(
-            "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha=? AND t.estado NOT IN ('cancelado')", (hoy_str,)
-        ).fetchone()[0],
-        'turnos_semana': db.execute(
-            "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha BETWEEN ? AND ? AND t.estado NOT IN ('cancelado')",
-            (hoy_str, semana_fin)
-        ).fetchone()[0],
-        'turnos_mes': db.execute(
-            "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha BETWEEN ? AND ? AND t.estado NOT IN ('cancelado')",
-            (mes_inicio, mes_fin)
-        ).fetchone()[0],
-        'total_clientes': db.execute(
-            "SELECT COUNT(*) FROM usuarios WHERE rol='cliente'"
-        ).fetchone()[0],
-        'slots_libres': db.execute(
-            "SELECT COUNT(*) FROM disponibilidad WHERE disponible=1 AND fecha >= ?", (hoy_str,)
-        ).fetchone()[0],
-        'turnos_pendientes': db.execute(
-            "SELECT COUNT(*) FROM turnos WHERE estado='pendiente'"
-        ).fetchone()[0],
-    }
-
-    turnos_hoy = db.execute('''
-        SELECT t.id, u.nombre||' '||u.apellido AS cliente, u.telefono,
-               d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha=? AND t.estado NOT IN ('cancelado')
-        ORDER BY d.hora_inicio
-    ''', (hoy_str,)).fetchall()
-
-    proximos = db.execute('''
-        SELECT t.id, u.nombre||' '||u.apellido AS cliente,
-               d.fecha, d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha > ? AND t.estado = 'confirmado'
-        ORDER BY d.fecha, d.hora_inicio
-        LIMIT 8
-    ''', (hoy_str,)).fetchall()
-
-    db.close()
-    return render_template('admin/dashboard.html',
-                           stats=stats, turnos_hoy=turnos_hoy, proximos=proximos)
-
-@app.route('/admin/turnos')
-@admin_required
-def admin_turnos():
-    db     = get_db()
-    fecha  = request.args.get('fecha', '')
-    estado = request.args.get('estado', '')
-
-    q = '''
-        SELECT t.id, u.nombre||' '||u.apellido AS cliente, u.telefono, u.email,
-               d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.notas, t.creado_en
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE 1=1
-    '''
-    params = []
-    if fecha:
-        q += ' AND d.fecha=?';   params.append(fecha)
-    if estado:
-        q += ' AND t.estado=?';  params.append(estado)
-    q += ' ORDER BY d.fecha DESC, d.hora_inicio'
-
-    turnos = db.execute(q, params).fetchall()
-    db.close()
-    return render_template('admin/turnos.html', turnos=turnos,
-                           filtro_fecha=fecha, filtro_estado=estado)
-
-@app.route('/admin/turnos/<int:id>/estado', methods=['POST'])
-@admin_required
-def admin_cambiar_estado(id):
-    estado = request.form['estado']
-    db     = get_db()
-    turno  = db.execute('SELECT * FROM turnos WHERE id=?', (id,)).fetchone()
-    disp_liberado = None
-    if turno:
-        if estado == 'cancelado':
-            disp_liberado = db.execute(
-                'SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?',
-                (turno['disponibilidad_id'],)
-            ).fetchone()
-        db.execute('UPDATE turnos SET estado=? WHERE id=?', (estado, id))
-        if estado == 'cancelado':
-            db.execute('UPDATE disponibilidad SET disponible=1 WHERE id=?',
-                       (turno['disponibilidad_id'],))
-        db.commit()
-    db.close()
-    if disp_liberado:
-        _notificar_lista_espera(disp_liberado['fecha'], disp_liberado['hora_inicio'])
-    flash('Estado actualizado.', 'success')
-    return redirect(request.referrer or url_for('admin_turnos'))
-
-@app.route('/admin/turnos-pendientes')
-@admin_required
-def admin_turnos_pendientes():
-    db = get_db()
-    pendientes = db.execute('''
-        SELECT t.id, u.nombre||' '||u.apellido AS cliente, u.email, u.telefono,
-               d.fecha, d.hora_inicio, d.hora_fin, t.estado, t.creado_en, t.comprobante_path
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.estado='pendiente'
-        ORDER BY t.creado_en
-    ''').fetchall()
-    db.close()
-    return render_template('admin/turnos_pendientes.html', pendientes=pendientes,
-                           sena_alias=SENA_ALIAS, sena_monto=SENA_MONTO)
-
-@app.route('/admin/turnos-pendientes/<int:id>/aprobar', methods=['POST'])
-@admin_required
-def admin_aprobar_turno(id):
-    db    = get_db()
-    turno = db.execute("SELECT * FROM turnos WHERE id=? AND estado='pendiente'", (id,)).fetchone()
-    if not turno:
-        db.close()
-        flash('Solicitud no encontrada o ya procesada.', 'danger')
-        return redirect(url_for('admin_turnos_pendientes'))
-
-    db.execute("UPDATE turnos SET estado='confirmado' WHERE id=?", (id,))
-    db.commit()
-    db.close()
-    flash('Turno confirmado. El cliente ya puede ver su turno confirmado.', 'success')
-    return redirect(url_for('admin_turnos_pendientes'))
-
-@app.route('/admin/turnos-pendientes/<int:id>/rechazar', methods=['POST'])
-@admin_required
-def admin_rechazar_turno(id):
-    db    = get_db()
-    turno = db.execute("SELECT * FROM turnos WHERE id=? AND estado='pendiente'", (id,)).fetchone()
-    if not turno:
-        db.close()
-        flash('Solicitud no encontrada o ya procesada.', 'danger')
-        return redirect(url_for('admin_turnos_pendientes'))
-
-    disp = db.execute('SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?',
-                      (turno['disponibilidad_id'],)).fetchone()
-    db.execute("UPDATE turnos SET estado='rechazado' WHERE id=?", (id,))
-    db.execute('UPDATE disponibilidad SET disponible=1 WHERE id=?',
-               (turno['disponibilidad_id'],))
-    db.commit()
-    db.close()
-    if disp:
-        _notificar_lista_espera(disp['fecha'], disp['hora_inicio'])
-    flash('Solicitud rechazada. El horario quedó liberado nuevamente.', 'info')
-    return redirect(url_for('admin_turnos_pendientes'))
-
-@app.route('/admin/clientes')
-@admin_required
-def admin_clientes():
-    db = get_db()
-    clientes = db.execute('''
-        SELECT u.id, u.nombre, u.apellido, u.telefono, u.email, u.creado_en,
-               COUNT(CASE WHEN t.estado NOT IN ('cancelado') THEN 1 END) AS turnos_activos,
-               COUNT(t.id) AS total_turnos
-        FROM usuarios u
-        LEFT JOIN turnos t ON u.id=t.cliente_id
-        WHERE u.rol='cliente'
-        GROUP BY u.id
-        ORDER BY u.nombre
-    ''').fetchall()
-    db.close()
-    return render_template('admin/clientes.html', clientes=clientes)
-
-@app.route('/admin/disponibilidad')
-@admin_required
-def admin_disponibilidad():
-    db  = get_db()
-    hoy = date.today().isoformat()
-
-    slots = db.execute('''
-        SELECT d.*,
-               t.id        AS turno_id,
-               t.estado    AS turno_estado,
-               u.nombre||' '||u.apellido AS cliente_nombre,
-               u.telefono  AS cliente_tel
-        FROM disponibilidad d
-        LEFT JOIN turnos t ON d.id=t.disponibilidad_id AND t.estado NOT IN ('cancelado')
-        LEFT JOIN usuarios u ON t.cliente_id=u.id
-        WHERE d.fecha >= ?
-        ORDER BY d.fecha, d.hora_inicio
-    ''', (hoy,)).fetchall()
-
-    by_date = defaultdict(list)
-    for s in slots:
-        by_date[s['fecha']].append(s)
-
-    db.close()
-    return render_template('admin/disponibilidad.html',
-                           by_date=dict(sorted(by_date.items())))
-
-@app.route('/admin/disponibilidad/generar', methods=['POST'])
-@admin_required
-def admin_generar_slots():
-    fecha_ini    = request.form['fecha_inicio']
-    fecha_fin    = request.form['fecha_fin']
-    hora_ini     = request.form['hora_inicio'].strip()
-    hora_fin     = request.form['hora_fin'].strip()
-    almuerzo_ini = request.form.get('almuerzo_inicio', '').strip() or None
-    almuerzo_fin = request.form.get('almuerzo_fin', '').strip() or None
-    dias         = [int(d) for d in request.form.getlist('dias')]
-
-    if not dias:
-        flash('Seleccioná al menos un día de la semana.', 'danger')
-        return redirect(url_for('admin_disponibilidad'))
-
-    try:
-        hi = datetime.strptime(hora_ini, '%H:%M')
-        hf = datetime.strptime(hora_fin, '%H:%M')
-    except ValueError:
-        flash('Formato de hora inválido. Usá HH:MM.', 'danger')
-        return redirect(url_for('admin_disponibilidad'))
-
-    if hf <= hi:
-        flash('El horario de fin debe ser posterior al de inicio.', 'danger')
-        return redirect(url_for('admin_disponibilidad'))
-
-    start   = datetime.strptime(fecha_ini, '%Y-%m-%d').date()
-    end     = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-    db      = get_db()
-    created = 0
-
-    current = start
-    while current <= end:
-        if current.weekday() in dias:
-            for (h_ini, h_fin) in _generar_slots_del_dia(hora_ini, hora_fin, almuerzo_ini, almuerzo_fin):
-                try:
-                    db.execute(
-                        'INSERT INTO disponibilidad (fecha, hora_inicio, hora_fin) VALUES (?,?,?)',
-                        (current.isoformat(), h_ini, h_fin)
-                    )
-                    created += 1
-                except sqlite3.IntegrityError:
-                    pass
-        current += timedelta(days=1)
-
-    db.commit()
-    db.close()
-    flash(f'Se generaron {created} horarios disponibles.', 'success')
-    return redirect(url_for('admin_disponibilidad'))
-
-@app.route('/admin/disponibilidad/<int:id>/toggle', methods=['POST'])
-@admin_required
-def admin_toggle_slot(id):
-    db   = get_db()
-    slot = db.execute('SELECT * FROM disponibilidad WHERE id=?', (id,)).fetchone()
-
-    if slot:
-        tiene_turno = db.execute(
-            "SELECT id FROM turnos WHERE disponibilidad_id=? AND estado NOT IN ('cancelado')",
-            (id,)
-        ).fetchone()
-
-        if tiene_turno and slot['disponible'] == 0:
-            db.close()
-            flash('No se puede bloquear: hay un turno activo. Cancelá el turno primero.', 'danger')
-            return redirect(url_for('admin_disponibilidad'))
-
-        toggling_to_available = (slot['disponible'] == 0)
-        db.execute('UPDATE disponibilidad SET disponible=? WHERE id=?',
-                   (0 if slot['disponible'] else 1, id))
-        db.commit()
-        db.close()
-        if toggling_to_available:
-            _notificar_lista_espera(slot['fecha'], slot['hora_inicio'])
-    else:
-        db.close()
-    return redirect(url_for('admin_disponibilidad'))
-
-@app.route('/admin/disponibilidad/bloquear-dia', methods=['POST'])
-@admin_required
-def admin_bloquear_dia():
-    fecha = request.form['fecha']
-    db    = get_db()
-    db.execute(
-        "UPDATE disponibilidad SET disponible=0 WHERE fecha=? "
-        "AND id NOT IN (SELECT disponibilidad_id FROM turnos "
-        "               WHERE estado NOT IN ('cancelado'))",
-        (fecha,)
-    )
-    db.commit()
-    db.close()
-    flash(f'Día {fecha} bloqueado. Los turnos reservados no fueron afectados.', 'info')
-    return redirect(url_for('admin_disponibilidad'))
-
-@app.route('/admin/disponibilidad/eliminar-libres', methods=['POST'])
-@admin_required
-def admin_eliminar_libres():
-    fecha = request.form['fecha']
-    db    = get_db()
-    db.execute(
-        "DELETE FROM disponibilidad WHERE fecha=? AND disponible=1",
-        (fecha,)
-    )
-    db.commit()
-    db.close()
-    flash(f'Horarios libres del {fecha} eliminados.', 'info')
-    return redirect(url_for('admin_disponibilidad'))
-
-# ── API calendario ────────────────────────────────────────────────────────────
-
-@app.route('/api/turnos')
-@admin_required
-def api_turnos():
-    db = get_db()
-    rows = db.execute('''
-        SELECT t.id, u.nombre||' '||u.apellido AS title,
-               d.fecha, d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE t.estado NOT IN ('cancelado')
-    ''').fetchall()
-    db.close()
-
-    colors = {
-        'reservado':  '#f59e0b',
-        'confirmado': '#3b82f6',
-        'completado': '#10b981',
-        'pendiente':  '#a16207',
-    }
-    events = []
-    for r in rows:
-        events.append({
-            'id':              r['id'],
-            'title':           r['title'],
-            'start':           f"{r['fecha']}T{r['hora_inicio']}",
-            'end':             f"{r['fecha']}T{r['hora_fin']}",
-            'backgroundColor': colors.get(r['estado'], '#6b7280'),
-            'borderColor':     colors.get(r['estado'], '#6b7280'),
-            'extendedProps':   {'estado': r['estado']},
-        })
-    return jsonify(events)
-
-# ── JSON API ──────────────────────────────────────────────────────────────────
+# ── JSON API helpers ────────────────────────────────────────────────────────
 
 def json_ok(data: dict, status=200):
     return jsonify({**data, 'success': True}), status
 
+
 def json_err(msg: str, status=400):
     return jsonify({'success': False, 'error': msg}), status
 
-def api_auth(f):
-    """Require login for API routes."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return json_err('No autenticado.', 401)
-        return f(*args, **kwargs)
-    return decorated
 
 def api_admin(f):
     @wraps(f)
@@ -919,6 +194,7 @@ def api_admin(f):
             return json_err('Acceso denegado.', 403)
         return f(*args, **kwargs)
     return decorated
+
 
 def api_cliente(f):
     @wraps(f)
@@ -1027,17 +303,20 @@ def api_cliente_dashboard():
 @app.route('/api/cliente/slots')
 @api_cliente
 def api_cliente_slots():
-    db  = get_db()
-    hoy = date.today().isoformat()
-    uid = session['user_id']
+    db    = get_db()
+    hoy   = date.today().isoformat()
+    ahora = datetime.now().strftime('%H:%M')
+    uid   = session['user_id']
 
+    # (d.fecha > hoy OR d.hora_inicio > ahora): excluye horarios de hoy que ya pasaron.
     slots = db.execute('''
         SELECT d.id, d.fecha, d.hora_inicio, d.hora_fin
         FROM disponibilidad d
         WHERE d.disponible=1 AND d.fecha >= ?
+          AND (d.fecha > ? OR d.hora_inicio > ?)
           AND d.id NOT IN (SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado'))
         ORDER BY d.fecha, d.hora_inicio
-    ''', (hoy,)).fetchall()
+    ''', (hoy, hoy, ahora)).fetchall()
 
     fechas_completas = [dict(r) for r in db.execute('''
         SELECT DISTINCT d.fecha,
@@ -1045,15 +324,21 @@ def api_cliente_slots():
         FROM disponibilidad d
         LEFT JOIN lista_espera le ON le.fecha = d.fecha AND le.usuario_id = ?
         WHERE d.fecha >= ?
+          -- Solo fechas que todavía tienen algún horario futuro (si no, el día ya pasó)
+          AND EXISTS (
+              SELECT 1 FROM disponibilidad d3
+              WHERE d3.fecha = d.fecha AND (d3.fecha > ? OR d3.hora_inicio > ?)
+          )
           AND d.fecha NOT IN (
               SELECT DISTINCT d2.fecha FROM disponibilidad d2
               WHERE d2.disponible=1 AND d2.fecha >= ?
+                AND (d2.fecha > ? OR d2.hora_inicio > ?)
                 AND d2.id NOT IN (
                     SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado')
                 )
           )
         ORDER BY d.fecha
-    ''', (uid, hoy, hoy)).fetchall()]
+    ''', (uid, hoy, hoy, ahora, hoy, hoy, ahora)).fetchall()]
 
     by_date: dict = {}
     for s in slots:
@@ -1082,8 +367,8 @@ def api_cliente_reservar():
     if not confirmo:
         return json_err('Debés confirmar que realizaste la transferencia de la seña para reservar el turno.')
 
-    # Procesar comprobante adjunto
-    comprobante_path = None
+    # Validar comprobante ANTES de tocar la base, pero persistirlo en disco
+    # solo si la reserva se registra con éxito (evita archivos huérfanos).
     archivo = request.files.get('comprobante')
     if not archivo or archivo.filename == '':
         return json_err('Debés adjuntar el comprobante de transferencia.')
@@ -1091,21 +376,30 @@ def api_cliente_reservar():
     if ext not in ALLOWED_EXTENSIONS:
         return json_err('Formato de comprobante no permitido. Usá JPG, PNG, PDF o WEBP.')
     filename = f"{uuid.uuid4().hex}.{ext}"
-    archivo.save(os.path.join(UPLOAD_FOLDER, filename))
     comprobante_path = f"comprobantes/{filename}"
 
     db = get_db()
+    slot = db.execute('SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?', (disp_id,)).fetchone()
+    if not slot:
+        db.close()
+        return json_err('El horario seleccionado no existe.')
+    if _slot_pasado(slot['fecha'], slot['hora_inicio']):
+        db.close()
+        return json_err('Ese horario ya pasó. Elegí otro.')
     try:
         db.execute('INSERT INTO turnos (cliente_id, disponibilidad_id, estado, comprobante_path) VALUES (?,?,?,?)',
                    (session['user_id'], disp_id, 'pendiente', comprobante_path))
         db.execute('UPDATE disponibilidad SET disponible=0 WHERE id=? AND disponible=1', (disp_id,))
         db.commit()
-        db.close()
-        return json_ok({'message': '¡Solicitud registrada! Tu turno quedará pendiente hasta que '
-                                    'el administrador verifique la transferencia.'})
     except sqlite3.IntegrityError:
         db.close()
         return json_err('Este horario acaba de ser tomado. Por favor elegí otro.')
+    db.close()
+
+    # Reserva confirmada → recién ahora guardamos el archivo en disco.
+    archivo.save(os.path.join(UPLOAD_FOLDER, filename))
+    return json_ok({'message': '¡Solicitud registrada! Tu turno quedará pendiente hasta que '
+                                'el administrador verifique la transferencia.'})
 
 @app.route('/api/cliente/lista-espera', methods=['POST'])
 @api_cliente
@@ -1170,8 +464,9 @@ def api_cliente_cancelar(id):
 @app.route('/api/cliente/turnos/<int:id>/slots')
 @api_cliente
 def api_cliente_reprogramar_slots(id):
-    db  = get_db()
-    hoy = date.today().isoformat()
+    db    = get_db()
+    hoy   = date.today().isoformat()
+    ahora = datetime.now().strftime('%H:%M')
 
     turno = db.execute('''
         SELECT t.*, d.fecha, d.hora_inicio, d.hora_fin, d.id AS disp_id
@@ -1191,9 +486,10 @@ def api_cliente_reprogramar_slots(id):
         SELECT d.id, d.fecha, d.hora_inicio, d.hora_fin
         FROM disponibilidad d
         WHERE d.disponible=1 AND d.fecha >= ? AND d.id != ?
+          AND (d.fecha > ? OR d.hora_inicio > ?)
           AND d.id NOT IN (SELECT disponibilidad_id FROM turnos WHERE estado NOT IN ('cancelado'))
         ORDER BY d.fecha, d.hora_inicio
-    ''', (hoy, turno['disp_id'])).fetchall()
+    ''', (hoy, turno['disp_id'], hoy, ahora)).fetchall()
 
     by_date: dict = {}
     for s in slots:
@@ -1223,9 +519,21 @@ def api_cliente_reprogramar(id):
         db.close()
         return json_err('Turno no encontrado.', 404)
 
+    if turno['estado'] in ('cancelado', 'completado', 'pendiente', 'rechazado'):
+        db.close()
+        return json_err('Turno no disponible para reprogramar.', 403)
+
     if not _puede_reprogramar(turno['fecha'], turno['hora_inicio']):
         db.close()
         return json_err('No es posible reprogramar un turno cuando faltan 8 horas o menos para su inicio.', 403)
+
+    nuevo_slot = db.execute('SELECT fecha, hora_inicio FROM disponibilidad WHERE id=?', (nueva_disp,)).fetchone()
+    if not nuevo_slot:
+        db.close()
+        return json_err('El horario seleccionado no existe.')
+    if _slot_pasado(nuevo_slot['fecha'], nuevo_slot['hora_inicio']):
+        db.close()
+        return json_err('Ese horario ya pasó. Elegí otro.')
 
     try:
         disp_viejo = db.execute(
@@ -1269,55 +577,81 @@ def api_admin_marcar_visto():
 @app.route('/api/admin/dashboard')
 @api_admin
 def api_admin_dashboard():
-    db  = get_db()
-    hoy = date.today()
-    hoy_str    = hoy.isoformat()
-    semana_fin = (hoy + timedelta(days=6)).isoformat()
-    mes_inicio = hoy.replace(day=1).isoformat()
-    prox_mes   = (hoy.replace(day=28) + timedelta(days=4))
-    mes_fin    = prox_mes.replace(day=1).isoformat()
+    from datetime import datetime as dt
+    db      = get_db()
+    hoy     = date.today()
+    hoy_str = hoy.isoformat()
+    ahora   = dt.now().strftime('%H:%M')
+
+    # Permitir consultar otra fecha via ?fecha=YYYY-MM-DD
+    fecha_param = request.args.get('fecha', '')
+    try:
+        fecha_obj = date.fromisoformat(fecha_param) if fecha_param else hoy
+    except ValueError:
+        fecha_obj = hoy
+    fecha_str = fecha_obj.isoformat()
+    es_hoy = (fecha_obj == hoy)
 
     stats = {
-        'turnos_hoy': db.execute(
+        'confirmados_hoy': db.execute(
             "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha=? AND t.estado NOT IN ('cancelado')", (hoy_str,)).fetchone()[0],
-        'turnos_semana': db.execute(
+            "WHERE d.fecha=? AND t.estado='confirmado'", (fecha_str,)).fetchone()[0],
+        'pendientes_hoy': db.execute(
             "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha BETWEEN ? AND ? AND t.estado NOT IN ('cancelado')",
-            (hoy_str, semana_fin)).fetchone()[0],
-        'turnos_mes': db.execute(
-            "SELECT COUNT(*) FROM turnos t JOIN disponibilidad d ON t.disponibilidad_id=d.id "
-            "WHERE d.fecha BETWEEN ? AND ? AND t.estado NOT IN ('cancelado')",
-            (mes_inicio, mes_fin)).fetchone()[0],
-        'total_clientes': db.execute("SELECT COUNT(*) FROM usuarios WHERE rol='cliente'").fetchone()[0],
-        'slots_libres': db.execute(
-            "SELECT COUNT(*) FROM disponibilidad WHERE disponible=1 AND fecha >= ?", (hoy_str,)).fetchone()[0],
-        'turnos_pendientes': db.execute(
+            "WHERE d.fecha=? AND t.estado IN ('reservado','pendiente')", (fecha_str,)).fetchone()[0],
+        'libres_hoy': db.execute(
+            "SELECT COUNT(*) FROM disponibilidad WHERE fecha=? AND disponible=1", (fecha_str,)).fetchone()[0],
+        'por_validar': db.execute(
             "SELECT COUNT(*) FROM turnos WHERE estado='pendiente'").fetchone()[0],
     }
 
-    turnos_hoy = [dict(r) for r in db.execute('''
-        SELECT t.id, u.nombre||' '||u.apellido AS cliente, u.telefono,
-               d.hora_inicio, d.hora_fin, t.estado
-        FROM turnos t
-        JOIN usuarios u ON t.cliente_id=u.id
-        JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha=? AND t.estado NOT IN ('cancelado')
+    # Agenda completa del día: todos los slots con turno activo si existe
+    agenda = [dict(r) for r in db.execute('''
+        SELECT d.id AS disp_id, d.hora_inicio, d.hora_fin, d.disponible,
+               t.id AS turno_id, t.estado, t.comprobante_path,
+               u.nombre||' '||u.apellido AS cliente,
+               u.telefono, u.email
+        FROM disponibilidad d
+        LEFT JOIN turnos t ON t.disponibilidad_id=d.id
+                           AND t.estado NOT IN ('cancelado')
+        LEFT JOIN usuarios u ON t.cliente_id=u.id
+        WHERE d.fecha=?
         ORDER BY d.hora_inicio
-    ''', (hoy_str,)).fetchall()]
+    ''', (fecha_str,)).fetchall()]
 
+    # Próximo turno confirmado (solo si es hoy)
+    proximo = None
+    if es_hoy:
+        prox_row = db.execute('''
+            SELECT t.id, u.nombre||' '||u.apellido AS cliente,
+                   d.hora_inicio, d.hora_fin, u.telefono
+            FROM turnos t
+            JOIN usuarios u ON t.cliente_id=u.id
+            JOIN disponibilidad d ON t.disponibilidad_id=d.id
+            WHERE d.fecha=? AND t.estado='confirmado' AND d.hora_inicio > ?
+            ORDER BY d.hora_inicio LIMIT 1
+        ''', (hoy_str, ahora)).fetchone()
+        if prox_row:
+            proximo = dict(prox_row)
+            turno_dt = dt.strptime(f"{hoy_str} {proximo['hora_inicio']}", '%Y-%m-%d %H:%M')
+            proximo['minutos_restantes'] = max(0, int((turno_dt - dt.now()).total_seconds() / 60))
+
+    # Próximos turnos confirmados (días posteriores a la fecha consultada)
     proximos = [dict(r) for r in db.execute('''
         SELECT t.id, u.nombre||' '||u.apellido AS cliente,
                d.fecha, d.hora_inicio, d.hora_fin, t.estado
         FROM turnos t
         JOIN usuarios u ON t.cliente_id=u.id
         JOIN disponibilidad d ON t.disponibilidad_id=d.id
-        WHERE d.fecha > ? AND t.estado = 'confirmado'
-        ORDER BY d.fecha, d.hora_inicio LIMIT 8
-    ''', (hoy_str,)).fetchall()]
+        WHERE d.fecha > ? AND t.estado='confirmado'
+        ORDER BY d.fecha, d.hora_inicio LIMIT 6
+    ''', (fecha_str,)).fetchall()]
 
     db.close()
-    return json_ok({'stats': stats, 'turnos_hoy': turnos_hoy, 'proximos': proximos})
+    return json_ok({
+        'stats': stats, 'agenda': agenda, 'proximo': proximo, 'proximos': proximos,
+        'fecha': fecha_str, 'es_hoy': es_hoy,
+    })
 
 @app.route('/api/admin/turnos')
 @api_admin
@@ -1453,8 +787,14 @@ def api_admin_generar_slots():
     if hf <= hi:
         return json_err('El horario de fin debe ser posterior al de inicio.')
 
-    start   = datetime.strptime(fecha_ini, '%Y-%m-%d').date()
-    end     = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+    try:
+        start = datetime.strptime(fecha_ini, '%Y-%m-%d').date()
+        end   = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+    except ValueError:
+        return json_err('Rango de fechas inválido. Usá YYYY-MM-DD.')
+    if end < start:
+        return json_err('La fecha de fin debe ser posterior o igual a la de inicio.')
+
     db      = get_db()
     created = 0
     current = start
@@ -1607,4 +947,6 @@ def api_admin_rechazar_turno(id):
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=5001)
+    # debug se activa solo con FLASK_DEBUG=1; por defecto queda apagado.
+    debug = os.getenv('FLASK_DEBUG') == '1'
+    app.run(debug=debug, port=int(os.getenv('PORT', '5001')))
