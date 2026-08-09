@@ -20,57 +20,79 @@ if (Astro.request.method === 'POST') {
     const json = await res.json();
     alerts = [{ cat: res.ok ? 'info' : 'danger', msg: json.message ?? json.error ?? '' }];
   }
+} else if (new URL(Astro.request.url).searchParams.get('reservado') === '1') {
+  alerts = [{ cat: 'success', msg: '¡Solicitud de turno registrada! Queda pendiente hasta que el administrador verifique la transferencia.' }];
 }
 
 const dashRes = await apiFetch('/api/cliente/dashboard', Astro.request);
 const { proximos = [], historial = [] } = dashRes.ok ? await dashRes.json() : {};
 ---
 <ClienteLayout title="Inicio" active="dashboard" userName={user.nombre} alerts={alerts}>
-  <div class="page-header">
+
+  <div class="home-header">
     <h2>Hola, {user.nombre} 👋</h2>
-    <a href="/cliente/reservar" class="btn btn-primary">➕ Reservar turno</a>
+    <a href="/cliente/reservar" class="btn-lime home-cta" style="width:auto;padding:13px 22px;margin:0">+ Reservar turno</a>
   </div>
 
-  <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
-    <h3 style="font-size:17px;font-weight:600">📅 Próximos turnos</h3>
-    <a href="/cliente/mis-turnos" style="font-size:13px;color:var(--accent-light);text-decoration:none">
-      Ver historial →
-    </a>
+  <div class="agenda-header">
+    <div class="agenda-title">
+      <span class="agenda-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="13" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/></svg>
+      </span>
+      <h3>Próximos turnos</h3>
+    </div>
+    <a href="/cliente/mis-turnos" class="agenda-add-link">Ver historial →</a>
   </div>
 
   {proximos.length > 0 ? proximos.map((t: any) => (
-    <div class="turno-card">
+    <div class="next-turno-card">
       <div>
         <div class="turno-fecha">{fechaCorta(t.fecha)}</div>
         <div class="turno-dia">{diaSemana(t.fecha)}</div>
         <div class="turno-hora">{t.hora_inicio} – {t.hora_fin}hs</div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="next-turno-actions">
         <span class={`badge badge-${t.estado}`}>{t.estado}</span>
         {(t.estado === 'reservado' || t.estado === 'confirmado') && (
           <>
-            <a href={`/cliente/reprogramar/${t.id}`} class="btn btn-ghost btn-sm">🔄 Reprogramar</a>
+            <a href={`/cliente/reprogramar/${t.id}`} class="btn-ghost-dark">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a7 7 0 0 1 12-5"/><path d="M17 10a7 7 0 0 1-12 5"/><path d="M15 5h2V3"/><path d="M5 15H3v2"/></svg>
+              Reprogramar
+            </a>
             <form method="post" onsubmit="return confirm('¿Cancelar este turno?')">
               <input type="hidden" name="_action" value="cancelar" />
               <input type="hidden" name="id" value={t.id} />
-              <button class="btn btn-danger btn-sm">✕ Cancelar</button>
+              <button class="btn-soft-danger">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>
+                Cancelar
+              </button>
             </form>
           </>
         )}
       </div>
     </div>
   )) : (
-    <div class="empty-state">
-      <div class="icon">✂️</div>
-      <p>No tenés turnos próximos.</p>
-      <a href="/cliente/reservar" class="btn btn-primary">Reservar ahora</a>
+    <div class="empty-card">
+      <div class="empty-icon-wrap" style="margin:0 auto 20px">
+        <div class="empty-circle">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="13" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/></svg>
+        </div>
+      </div>
+      <h4>No tenés turnos próximos</h4>
+      <p>Reservá un turno y va a aparecer acá.</p>
+      <a href="/cliente/reservar" class="btn-lime">Reservar ahora</a>
     </div>
   )}
 
   {historial.length > 0 && (
     <>
-      <div style="margin-top:32px;margin-bottom:8px">
-        <h3 style="font-size:17px;font-weight:600">📋 Historial reciente</h3>
+      <div class="agenda-header" style="margin-top:8px">
+        <div class="agenda-title">
+          <span class="agenda-icon">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="12" height="15" rx="1.5"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10.5" x2="13" y2="10.5"/><line x1="7" y1="14" x2="11" y2="14"/></svg>
+          </span>
+          <h3>Historial reciente</h3>
+        </div>
       </div>
       <div class="card">
         <div class="table-wrap">

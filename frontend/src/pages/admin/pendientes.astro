@@ -1,7 +1,7 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { apiFetch } from '../../utils/api';
-import { fechaCorta, diaSemana } from '../../utils/format';
+import { fechaCorta, diaSemana, today } from '../../utils/format';
 
 const meRes = await apiFetch('/api/auth/me', Astro.request);
 if (!meRes.ok) return Astro.redirect('/login');
@@ -26,92 +26,99 @@ if (Astro.request.method === 'POST') {
 
 const dataRes = await apiFetch('/api/admin/turnos-pendientes', Astro.request);
 const { pendientes = [], sena_alias = '', sena_monto = 0 } = dataRes.ok ? await dataRes.json() : {};
+
+const hoyStr = today();
+const mananaDate = new Date();
+mananaDate.setDate(mananaDate.getDate() + 1);
+const mananaStr = `${mananaDate.getFullYear()}-${String(mananaDate.getMonth() + 1).padStart(2, '0')}-${String(mananaDate.getDate()).padStart(2, '0')}`;
+
+function turnoLabel(fecha: string, hora: string) {
+  if (fecha === hoyStr) return `Hoy, ${hora}hs`;
+  if (fecha === mananaStr) return `Mañana, ${hora}hs`;
+  return `${diaSemana(fecha)} ${fechaCorta(fecha)}, ${hora}hs`;
+}
 ---
 <AdminLayout title="Turnos pendientes" active="pendientes" userName={user.nombre} alerts={alerts}>
-  <div class="page-header">
-    <h2>⏳ Turnos pendientes de verificación</h2>
-  </div>
 
-  <div class="alert alert-info" style="margin-bottom:20px">
-    💳 Alias de transferencia: <strong>{sena_alias}</strong> — Monto: <strong>${sena_monto.toLocaleString('es-AR')}</strong>
+  <div class="section-header">
+    <span class="agenda-icon">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10M5 17h10M6 3c0 4 2.5 5.5 4 7 1.5-1.5 4-3 4-7M6 17c0-4 2.5-5.5 4-7 1.5 1.5 4 3 4 7"/></svg>
+      </span>
+    <h2>Turnos pendientes de verificación</h2>
   </div>
+  <p class="page-subtitle">Revisá y verificá las transferencias de seña de los clientes para confirmar sus turnos.</p>
 
   {pendientes.length > 0 ? (
-    <div class="card">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Cliente</th>
-              <th>Email</th>
-              <th>Teléfono</th>
-              <th>Fecha</th>
-              <th>Hora</th>
-              <th>Solicitado</th>
-              <th>Comprobante</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(pendientes as any[]).map((t: any) => {
-              const archivoNombre = t.comprobante_path ? t.comprobante_path.split('/').pop() : null;
-              const comprobanteUrl = archivoNombre ? `/api/admin/comprobante/${archivoNombre}` : null;
-              return (
-              <tr>
-                <td style="color:var(--text-muted)">{t.id}</td>
-                <td><strong>{t.cliente}</strong></td>
-                <td style="font-size:13px;color:var(--text-muted)">{t.email}</td>
-                <td>{t.telefono || '—'}</td>
-                <td>
-                  <strong>{fechaCorta(t.fecha)}</strong>
-                  <span style="color:var(--text-muted);font-size:12px;display:block">{diaSemana(t.fecha)}</span>
-                </td>
-                <td><strong>{t.hora_inicio}</strong> – {t.hora_fin}hs</td>
-                <td style="font-size:12px;color:var(--text-muted)">
-                  {t.creado_en ? t.creado_en.slice(0, 16) : '—'}
-                </td>
-                <td>
-                  {comprobanteUrl ? (
-                    <a href={comprobanteUrl} target="_blank" rel="noopener"
-                       class="btn btn-sm"
-                       style="font-size:12px;white-space:nowrap">
-                      📎 Ver comprobante
-                    </a>
-                  ) : (
-                    <span style="color:var(--text-muted);font-size:12px">Sin adjunto</span>
-                  )}
-                </td>
-                <td>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <form method="post" onsubmit="return confirm('¿Confirmar este turno? Verificaste el comprobante de transferencia.')">
-                      <input type="hidden" name="id" value={t.id} />
-                      <input type="hidden" name="_action" value="aprobar" />
-                      <button class="btn btn-success btn-sm"
-                              disabled={!comprobanteUrl || undefined}
-                              title={!comprobanteUrl ? 'El cliente no adjuntó comprobante' : ''}>
-                        ✅ Aprobar
-                      </button>
-                    </form>
-                    <form method="post" onsubmit="return confirm('¿Rechazar esta solicitud? El horario quedará libre.')">
-                      <input type="hidden" name="id" value={t.id} />
-                      <input type="hidden" name="_action" value="rechazar" />
-                      <button class="btn btn-danger btn-sm">✕ Rechazar</button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <div class="pending-layout">
+      <div class="pending-list">
+        {(pendientes as any[]).map((t: any) => {
+          const archivoNombre = t.comprobante_path ? t.comprobante_path.split('/').pop() : null;
+          const comprobanteUrl = archivoNombre ? `/api/admin/comprobante/${archivoNombre}` : null;
+          return (
+            <div class="pending-card">
+              <div class="pending-card-top">
+                <span class="label">Cliente</span>
+                <span class="amount">${sena_monto.toLocaleString('es-AR')}</span>
+              </div>
+              <div class="alias-value">{t.cliente}</div>
+              <div class="meta-line">
+                {t.telefono && <span>📱 {t.telefono}</span>}
+                {comprobanteUrl ? (
+                  <span>· <a href={comprobanteUrl} target="_blank" rel="noopener">📎 Ver comprobante</a></span>
+                ) : (
+                  <span>· Sin comprobante adjunto</span>
+                )}
+              </div>
+              <div class="appointment-line">Turno: <strong>{turnoLabel(t.fecha, t.hora_inicio)}</strong></div>
+
+              <div class="pending-card-actions">
+                <form method="post" onsubmit="return confirm('¿Rechazar esta solicitud? El horario quedará libre.')">
+                  <input type="hidden" name="id" value={t.id} />
+                  <input type="hidden" name="_action" value="rechazar" />
+                  <button class="btn-decline">Rechazar</button>
+                </form>
+                <form method="post" style="flex:1" onsubmit="return confirm('¿Confirmar este turno? Verificaste el comprobante de transferencia.')">
+                  <input type="hidden" name="id" value={t.id} />
+                  <input type="hidden" name="_action" value="aprobar" />
+                  <button class="btn-verify"
+                          disabled={!comprobanteUrl || undefined}
+                          title={!comprobanteUrl ? 'El cliente no adjuntó comprobante' : ''}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l3.5 3.5L16 5.5"/></svg>
+                    Verificar
+                  </button>
+                </form>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <aside class="pending-side">
+        <div class="side-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="16" height="11" rx="2"/><line x1="2" y1="9" x2="18" y2="9"/></svg>
+        </div>
+        <h4>Datos de transferencia</h4>
+        <p>Verificá que el alias y el monto coincidan con lo declarado por el cliente antes de aprobar.</p>
+        <hr />
+        <div class="transfer-ref">
+          <span class="ref-label">Alias</span>
+          <strong>{sena_alias}</strong>
+        </div>
+        <div class="transfer-ref">
+          <span class="ref-label">Monto</span>
+          <strong>${sena_monto.toLocaleString('es-AR')}</strong>
+        </div>
+      </aside>
     </div>
   ) : (
-    <div class="empty-state">
-      <div class="icon">✅</div>
-      <p>No hay solicitudes pendientes de verificación.</p>
-      <p style="font-size:13px;color:var(--text-muted)">Cuando un cliente reserve un turno y declare haber transferido la seña, aparecerá aquí.</p>
+    <div class="empty-card">
+      <div class="empty-icon-wrap" style="margin:0 auto 20px">
+        <div class="empty-circle">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5L15.5 6"/></svg>
+        </div>
+      </div>
+      <h4>Todo al día</h4>
+      <p>No hay solicitudes pendientes de verificación. Cuando un cliente reserve un turno y declare haber transferido la seña, aparecerá aquí.</p>
     </div>
   )}
 </AdminLayout>

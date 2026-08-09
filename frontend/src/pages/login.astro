@@ -32,34 +32,43 @@ if (Astro.request.method === 'POST') {
     });
   }
   alerts = [{ cat: 'danger', msg: json.error ?? 'Error al iniciar sesión.' }];
+} else if (new URL(Astro.request.url).searchParams.get('registered') === '1') {
+  alerts = [{ cat: 'success', msg: '¡Cuenta creada! Iniciá sesión para reservar tu turno.' }];
 }
 ---
 <AuthLayout title="Iniciar sesión" alerts={alerts}>
-  <div slot="logo" class="auth-logo">
-    <span class="icon">✂️</span>
-    <h1>BarberApp</h1>
-    <p>Sistema de turnos para tu peluquería</p>
+  <div slot="logo">
+    <h1>Iniciar<br />Sesión</h1>
+    <p>Ingresa tus credenciales para acceder a tus citas.</p>
   </div>
 
   <form method="post" autocomplete="on">
-    <div class="form-grid" style="grid-template-columns:1fr">
-      <div class="form-group">
-        <label>Correo electrónico</label>
-        <input type="email" name="email" placeholder="tu@email.com" required autofocus />
-      </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" name="password" placeholder="••••••••" required />
+    <div class="form-group">
+      <label>Correo o Usuario</label>
+      <input type="email" name="email" placeholder="tu@email.com" required autofocus />
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <div class="password-field">
+        <input type="password" name="password" id="password" placeholder="••••••••" required />
+        <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar contraseña">👁</button>
       </div>
     </div>
-    <div style="margin-top:20px">
-      <button type="submit" class="btn btn-primary btn-block" style="padding:14px">
-        Iniciar sesión
-      </button>
-    </div>
+    <button type="submit" class="btn-lime">
+      Iniciar sesión →
+    </button>
   </form>
 
-  <div class="auth-footer" style="margin-top:16px">
-    ¿No tenés cuenta? <a href="/register">Registrarse</a>
+  <div class="auth-footer">
+    ¿No tienes una cuenta? <a href="/register">Regístrate</a>
   </div>
+
+  <script>
+    const toggle = document.getElementById('togglePassword');
+    const pass = document.getElementById('password') as HTMLInputElement | null;
+    toggle?.addEventListener('click', () => {
+      if (!pass) return;
+      pass.type = pass.type === 'password' ? 'text' : 'password';
+    });
+  </script>
 </AuthLayout>

@@ -33,10 +33,9 @@ if (Astro.request.method === 'POST') {
 }
 ---
 <AuthLayout title="Crear cuenta" alerts={alerts}>
-  <div slot="logo" class="auth-logo">
-    <span class="icon">✂️</span>
-    <h1>Crear cuenta</h1>
-    <p>Registrate para reservar tu turno</p>
+  <div slot="logo">
+    <h1>Crear<br />Cuenta</h1>
+    <p>Registrate para reservar tu turno.</p>
   </div>
 
   <form method="post">
@@ -49,31 +48,48 @@ if (Astro.request.method === 'POST') {
         <label>Apellido *</label>
         <input type="text" name="apellido" value={formValues.apellido ?? ''} required />
       </div>
-      <div class="form-group">
+      <div class="form-group full">
         <label>Teléfono * (con código de área, sin 0 ni 15)</label>
         <input type="tel" name="telefono" value={formValues.telefono ?? ''} placeholder="Ej: 3876319654" required />
       </div>
-      <div class="form-group">
-        <label>Correo electrónico *</label>
+      <div class="form-group full">
+        <label>Correo o Usuario *</label>
         <input type="email" name="email" value={formValues.email ?? ''} required />
       </div>
       <div class="form-group">
         <label>Contraseña *</label>
-        <input type="password" name="password" required placeholder="Mínimo 6 caracteres" />
+        <div class="password-field">
+          <input type="password" name="password" id="password" required placeholder="Mínimo 6 caracteres" />
+          <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar contraseña">👁</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Confirmar contraseña *</label>
-        <input type="password" name="confirm_password" required placeholder="Repetí la contraseña" />
+        <div class="password-field">
+          <input type="password" name="confirm_password" id="confirmPassword" required placeholder="Repetí la contraseña" />
+          <button type="button" class="password-toggle" id="toggleConfirmPassword" aria-label="Mostrar contraseña">👁</button>
+        </div>
       </div>
     </div>
-    <div style="margin-top:20px">
-      <button type="submit" class="btn btn-primary btn-block" style="padding:14px">
-        Crear cuenta
-      </button>
-    </div>
+    <button type="submit" class="btn-lime">
+      Crear cuenta →
+    </button>
   </form>
 
-  <div class="auth-footer" style="margin-top:16px">
-    ¿Ya tenés cuenta? <a href="/login">Iniciar sesión</a>
+  <div class="auth-footer">
+    ¿Ya tienes una cuenta? <a href="/login">Iniciar sesión</a>
   </div>
+
+  <script>
+    function wireToggle(btnId: string, inputId: string) {
+      const btn = document.getElementById(btnId);
+      const input = document.getElementById(inputId) as HTMLInputElement | null;
+      btn?.addEventListener('click', () => {
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+      });
+    }
+    wireToggle('togglePassword', 'password');
+    wireToggle('toggleConfirmPassword', 'confirmPassword');
+  </script>
 </AuthLayout>

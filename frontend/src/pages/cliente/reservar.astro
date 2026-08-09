@@ -50,16 +50,17 @@ const { by_date = {}, fechas_completas = [] } = slotsRes.ok ? await slotsRes.jso
 const dates = Object.keys(by_date).sort();
 ---
 <ClienteLayout title="Reservar turno" active="reservar" userName={user.nombre} alerts={alerts}>
-  <div class="page-header">
-    <h2>➕ Reservar turno</h2>
+
+  <div class="section-header">
+    <span class="agenda-icon">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/></svg>
+    </span>
+    <h2>Reservar turno</h2>
   </div>
+  <p class="page-subtitle">Seleccioná el día y horario que prefieras. Cada turno tiene una duración de <strong>1 hora</strong>.</p>
 
   {dates.length > 0 && (
     <>
-      <p style="color:var(--text-muted);margin-bottom:20px;font-size:14px">
-        Seleccioná el día y horario que prefieras. Cada turno tiene una duración de <strong>1 hora</strong>.
-      </p>
-
       <form method="post" id="reserva-form" enctype="multipart/form-data">
         <input type="hidden" name="_action" value="reservar" />
         <input type="hidden" name="disponibilidad_id" id="disp-input" />
@@ -68,7 +69,7 @@ const dates = Object.keys(by_date).sort();
           <div class="fecha-block">
             <div class="fecha-header">
               <h3>{fechaLarga(fecha)}</h3>
-              <span>
+              <span class="pill">
                 {by_date[fecha].length} horario{by_date[fecha].length !== 1 ? 's' : ''} disponible{by_date[fecha].length !== 1 ? 's' : ''}
               </span>
             </div>
@@ -97,7 +98,7 @@ const dates = Object.keys(by_date).sort();
           <div class="sena-box">
             <p class="sena-title">💳 Seña obligatoria por transferencia</p>
             <p style="font-size:14px;margin-bottom:6px">
-              Para confirmar tu turno debés realizar una transferencia de <strong>$5.000</strong> al siguiente alias:
+              Para confirmar tu turno debés realizar una transferencia de <strong>$8.000</strong> al siguiente alias:
             </p>
             <div class="sena-alias">josevilte2001</div>
             <p style="font-size:13px;color:var(--text-muted)">
@@ -105,7 +106,7 @@ const dates = Object.keys(by_date).sort();
             </p>
             <label class="sena-check">
               <input type="checkbox" name="confirmo_transferencia" id="confirmo-cb" value="1" />
-              <span>Ya realicé la transferencia de $5.000</span>
+              <span>Ya realicé la transferencia de $8.000</span>
             </label>
             <div style="margin-top:14px">
               <label for="comprobante-input" style="display:block;font-size:14px;font-weight:600;margin-bottom:6px">
@@ -120,7 +121,10 @@ const dates = Object.keys(by_date).sort();
 
             </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center">
-            <button type="button" class="btn btn-ghost" id="btn-deselect">✕ Cambiar</button>
+            <button type="button" class="btn-ghost-dark" id="btn-deselect">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>
+              Cambiar
+            </button>
             <button type="button" id="btn-whatsapp" disabled
                     style="display:flex;align-items:center;gap:8px;background:#25d366;color:#fff;font-weight:600;font-size:14px;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;opacity:0.5">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -135,32 +139,37 @@ const dates = Object.keys(by_date).sort();
   )}
 
   {dates.length === 0 && fechas_completas.length === 0 && (
-    <div class="empty-state">
-      <div class="icon">📭</div>
-      <p>No hay horarios disponibles por el momento.</p>
-      <p style="font-size:13px;color:var(--text-muted)">Por favor revisá más adelante o contactá a la peluquería.</p>
+    <div class="empty-card">
+      <div class="empty-icon-wrap" style="margin:0 auto 20px">
+        <div class="empty-circle">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="13" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/></svg>
+        </div>
+      </div>
+      <h4>No hay horarios disponibles</h4>
+      <p>Por favor revisá más adelante o contactá a la peluquería.</p>
     </div>
   )}
 
   {fechas_completas.length > 0 && (
-    <div style={`margin-top:${dates.length > 0 ? '28px' : '0'}`}>
+    <div style={`margin-top:${dates.length > 0 ? '32px' : '0'}`}>
       {dates.length > 0 && (
-        <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;color:var(--text-muted)">
-          📋 Fechas sin turnos disponibles
-        </h3>
+        <div class="section-header" style="margin-bottom:16px">
+          <span class="agenda-icon">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.2"/><path d="M10 6v4l3 2"/></svg>
+          </span>
+          <h2 style="font-size:16px">Fechas sin turnos disponibles</h2>
+        </div>
       )}
       {(fechas_completas as any[]).map((fc: any) => (
         <div class="fecha-block">
           <div class="fecha-header">
             <h3>{fechaLarga(fc.fecha)}</h3>
-            <span style="background:var(--surface3);color:var(--text-muted);padding:3px 10px;border-radius:20px;font-size:12px">
-              Sin disponibilidad
-            </span>
+            <span class="pill">Sin disponibilidad</span>
           </div>
           <div style="padding:16px 20px">
             {fc.en_espera ? (
-              <div style="display:flex;align-items:center;gap:10px;color:#10b981;font-size:14px;font-weight:500">
-                <span style="font-size:18px">✅</span>
+              <div style="display:flex;align-items:center;gap:10px;color:var(--accent);font-size:14px;font-weight:500">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0"><path d="M4.5 10.5l3.5 3.5L15.5 6"/></svg>
                 <span>Ya estás en la lista de espera para esta fecha. Te avisaremos si se libera un turno.</span>
               </div>
             ) : (
@@ -171,7 +180,7 @@ const dates = Object.keys(by_date).sort();
                 <form method="post">
                   <input type="hidden" name="_action" value="lista_espera" />
                   <input type="hidden" name="fecha" value={fc.fecha} />
-                  <button type="submit" class="btn btn-primary">🔔 Avisarme si se libera un turno</button>
+                  <button type="submit" class="btn-lime" style="width:auto;padding:12px 20px;margin:0">Avisarme si se libera un turno</button>
                 </form>
               </>
             )}
@@ -253,6 +262,10 @@ btnWhatsapp?.addEventListener('click', async () => {
   const fecha = confFecha?.textContent ?? '';
   const hora  = confHora?.textContent  ?? '';
 
+  // Abrimos la pestaña de WhatsApp YA, dentro del gesto del click. Si se abre
+  // después del await, el navegador la bloquea y queda en blanco.
+  const waWin = window.open('', '_blank');
+
   // Deshabilitar mientras se envía
   btnWhatsapp.disabled = true;
   btnWhatsapp.style.opacity = '0.7';
@@ -264,6 +277,7 @@ btnWhatsapp?.addEventListener('click', async () => {
     const json = await res.json();
 
     if (!res.ok || !json.success) {
+      if (waWin) waWin.close();
       if (btnLabel) btnLabel.textContent = 'Confirmar y enviar por WhatsApp';
       btnWhatsapp.disabled = false;
       btnWhatsapp.style.opacity = '1';
@@ -271,14 +285,17 @@ btnWhatsapp?.addEventListener('click', async () => {
       return;
     }
 
-    // Registro exitoso → abrir WhatsApp
-    const msg = `Hola! Reservé un turno para el ${fecha} a las ${hora}. Te mando el comprobante de la seña de $5.000. ¿Me lo podés confirmar? ¡Gracias!`;
-    window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+    // Registro exitoso → dirigir la pestaña ya abierta a WhatsApp
+    const msg = `Hola! Reservé un turno para el ${fecha} a las ${hora}. Te mando el comprobante de la seña de $8.000. ¿Me lo podés confirmar? ¡Gracias!`;
+    const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+    if (waWin) waWin.location.href = waUrl;
+    else window.open(waUrl, '_blank');
 
     // Redirigir al dashboard con mensaje de éxito
     window.location.href = '/cliente?reservado=1';
 
   } catch {
+    if (waWin) waWin.close();
     if (btnLabel) btnLabel.textContent = 'Confirmar y enviar por WhatsApp';
     btnWhatsapp.disabled = false;
     btnWhatsapp.style.opacity = '1';

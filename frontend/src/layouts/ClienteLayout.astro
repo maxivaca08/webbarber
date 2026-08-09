@@ -8,10 +8,16 @@ interface Props {
 }
 const { title, active, userName, alerts = [] } = Astro.props;
 
+const icons = {
+  dashboard: '<rect x="2.5" y="2.5" width="6" height="6" rx="1.2"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.2"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.2"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.2"/>',
+  reservar: '<line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/>',
+  turnos: '<rect x="2.5" y="4" width="15" height="13" rx="2"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/>',
+};
+
 const navItems = [
-  { href: '/cliente', label: 'Inicio',       icon: '🏠', key: 'dashboard' },
-  { href: '/cliente/reservar', label: 'Reservar', icon: '➕', key: 'reservar' },
-  { href: '/cliente/mis-turnos', label: 'Mis turnos', icon: '📋', key: 'mis-turnos' },
+  { href: '/cliente',                 label: 'Inicio',      icon: icons.dashboard, key: 'dashboard' },
+  { href: '/cliente/reservar',        label: 'Reservar',    icon: icons.reservar,  key: 'reservar' },
+  { href: '/cliente/mis-turnos',      label: 'Mis turnos',  icon: icons.turnos,    key: 'mis-turnos' },
 ];
 ---
 <!doctype html>
@@ -19,49 +25,95 @@ const navItems = [
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{title} — BarberApp</title>
+  <title>{title} — BarberStudio</title>
 </head>
-<body class="app-body">
+<body class={`app-body${active !== 'reservar' ? ' has-cta' : ''}`}>
+
+<!-- Mobile top bar -->
+<div class="mobile-topbar">
+  <div class="topbar-logo">
+    <div class="sidebar-logo-icon">
+      <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M28 30 L70 72" />
+        <path d="M70 72 C 76 78, 76 84, 70 84 C 64 84, 62 80, 66 76" />
+        <path d="M72 28 L30 70" />
+        <g transform="rotate(-45 51 49)">
+          <line x1="40" y1="38" x2="40" y2="60" />
+          <line x1="46" y1="38" x2="46" y2="60" />
+          <line x1="52" y1="38" x2="52" y2="60" />
+          <line x1="58" y1="38" x2="58" y2="60" />
+          <rect x="38" y="32" width="24" height="7" rx="2" />
+        </g>
+      </svg>
+    </div>
+    <span>BarberStudio</span>
+  </div>
+  <div class="topbar-avatar">🙂</div>
+</div>
 
 <!-- Desktop sidebar -->
 <aside class="sidebar">
   <div class="sidebar-logo">
-    <div class="icon">✂️</div>
+    <div class="sidebar-logo-icon">
+      <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M28 30 L70 72" />
+        <path d="M70 72 C 76 78, 76 84, 70 84 C 64 84, 62 80, 66 76" />
+        <path d="M72 28 L30 70" />
+        <g transform="rotate(-45 51 49)">
+          <line x1="40" y1="38" x2="40" y2="60" />
+          <line x1="46" y1="38" x2="46" y2="60" />
+          <line x1="52" y1="38" x2="52" y2="60" />
+          <line x1="58" y1="38" x2="58" y2="60" />
+          <rect x="38" y="32" width="24" height="7" rx="2" />
+        </g>
+      </svg>
+    </div>
+    <h1>BarberStudio</h1>
+  </div>
+
+  <div class="sidebar-user-card">
+    <div class="sidebar-avatar">🙂</div>
     <div>
-      <h1>BarberApp</h1>
-      <span>Mi cuenta</span>
+      <strong>{userName}</strong>
+      <span>Cliente</span>
     </div>
   </div>
+
   <nav>
     {navItems.map(n => (
       <a href={n.href} class={active === n.key ? 'active' : ''}>
-        <span class="nav-icon">{n.icon}</span>
+        <span class="nav-icon" set:html={`<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${n.icon}</svg>`} />
         <span>{n.label}</span>
       </a>
     ))}
   </nav>
-  <div class="sidebar-footer">
-    <div class="sidebar-user">
-      <strong>{userName}</strong>
-      <span>Cliente</span>
-    </div>
-    <a href="/logout" title="Cerrar sesión">🚪</a>
+
+  <div class="sidebar-bottom">
+    <a href="/cliente/reservar" class="btn-lime sidebar-cta">+ Reservar turno</a>
+    <a href="/logout" class="sidebar-link danger">Cerrar sesión</a>
   </div>
 </aside>
 
-<!-- Mobile bottom nav -->
-<nav class="bottom-nav">
-  {navItems.map(n => (
-    <a href={n.href} class={active === n.key ? 'active' : ''}>
-      <span class="nav-icon">{n.icon}</span>
-      <span>{n.label}</span>
+<!-- Mobile bottom nav + floating CTA -->
+<div class="mobile-footer">
+  {active !== 'reservar' && (
+    <div class="mobile-cta-bar">
+      <a href="/cliente/reservar" class="btn-lime">+ Reservar turno</a>
+    </div>
+  )}
+  <nav class="bottom-nav">
+    {navItems.map(n => (
+      <a href={n.href} class={active === n.key ? 'active' : ''}>
+        <span class="nav-icon" set:html={`<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${n.icon}</svg>`} />
+        <span>{n.label}</span>
+      </a>
+    ))}
+    <a href="/logout">
+      <span class="nav-icon" set:html={`<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3H4.5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4.5 17H7"/><path d="M12.5 14l4-4-4-4"/><line x1="16.3" y1="10" x2="7" y2="10"/></svg>`} />
+      <span>Salir</span>
     </a>
-  ))}
-  <a href="/logout">
-    <span class="nav-icon">🚪</span>
-    <span>Salir</span>
-  </a>
-</nav>
+  </nav>
+</div>
 
 <main class="main">
   {alerts.length > 0 && (

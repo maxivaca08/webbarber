@@ -11,22 +11,67 @@ const { title, alerts = [] } = Astro.props;
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{title} — BarberApp</title>
+  <title>{title} — BarberStudio</title>
 </head>
 <body class="auth-body">
-<div class="auth-card">
-  <slot name="logo" />
-  {alerts.length > 0 && (
-    <div class="alerts">
-      {alerts.map(a => (
-        <div class={`alert alert-${a.cat}`}>
-          {a.cat === 'success' ? '✅' : a.cat === 'info' ? 'ℹ️' : '⚠️'}
-          {a.msg}
-        </div>
-      ))}
+  <div class="auth-visual">
+    <div class="auth-logo-box">
+      <svg class="auth-logo-icon" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- navaja -->
+        <path d="M28 30 L70 72" />
+        <path d="M70 72 C 76 78, 76 84, 70 84 C 64 84, 62 80, 66 76" />
+        <path d="M28 30 L20 22" />
+        <!-- peine -->
+        <path d="M72 28 L30 70" />
+        <g transform="rotate(-45 51 49)">
+          <line x1="38" y1="36" x2="38" y2="62" />
+          <line x1="43" y1="36" x2="43" y2="62" />
+          <line x1="48" y1="36" x2="48" y2="62" />
+          <line x1="53" y1="36" x2="53" y2="62" />
+          <line x1="58" y1="36" x2="58" y2="62" />
+          <line x1="63" y1="36" x2="63" y2="62" />
+          <rect x="36" y="30" width="29" height="8" rx="2" />
+        </g>
+      </svg>
+      <span class="auth-logo-text">Barber<em>Studio</em></span>
     </div>
-  )}
-  <slot />
-</div>
+  </div>
+
+  <div class="auth-panel">
+    <div class="auth-panel-inner">
+      <div class="auth-mobile-logo">
+        <svg class="auth-logo-icon" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M28 30 L70 72" />
+          <path d="M70 72 C 76 78, 76 84, 70 84 C 64 84, 62 80, 66 76" />
+          <path d="M72 28 L30 70" />
+          <g transform="rotate(-45 51 49)">
+            <line x1="40" y1="38" x2="40" y2="60" />
+            <line x1="46" y1="38" x2="46" y2="60" />
+            <line x1="52" y1="38" x2="52" y2="60" />
+            <line x1="58" y1="38" x2="58" y2="60" />
+            <rect x="38" y="32" width="24" height="7" rx="2" />
+          </g>
+        </svg>
+        <span>BarberStudio</span>
+      </div>
+
+      <div class="auth-heading">
+        <slot name="logo" />
+      </div>
+
+      {alerts.length > 0 && (
+        <div class="alerts">
+          {alerts.map(a => (
+            <div class={`alert alert-${a.cat}`}>
+              {a.cat === 'success' ? '✅' : a.cat === 'info' ? 'ℹ️' : '⚠️'}
+              {a.msg}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <slot />
+    </div>
+  </div>
 </body>
 </html>
