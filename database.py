@@ -158,7 +158,7 @@ def init_db():
     # Seed: admin por defecto. Credenciales por variable de entorno;
     # si no hay ADMIN_PASSWORD se genera una temporal y se muestra una sola vez.
     if db.execute("SELECT COUNT(*) FROM usuarios WHERE rol='admin'").fetchone()[0] == 0:
-        admin_email  = os.getenv('ADMIN_EMAIL', 'admin@barberapp.com')
+        admin_email  = os.getenv('ADMIN_EMAIL', 'admin@barberapp.com').strip().lower()
         admin_nombre = os.getenv('ADMIN_NOMBRE', 'Admin')
         admin_pass   = os.getenv('ADMIN_PASSWORD')
         if not admin_pass:
@@ -175,5 +175,22 @@ def init_db():
             (admin_nombre, '', admin_email, generate_password_hash(admin_pass), 'admin')
         )
         db.commit()
+
+    # Corrección puntual del admin ya existente vía entorno (nombre y/o
+    # contraseña) sin borrar la base. Poné ADMIN_RESET=1, redeploy, y una vez
+    # aplicado QUITÁ la variable (si no, se reaplica en cada arranque).
+    if os.getenv('ADMIN_RESET') == '1':
+        nuevo_nombre = os.getenv('ADMIN_NOMBRE', 'Admin')
+        nueva_pass   = os.getenv('ADMIN_PASSWORD')
+        campos  = ['nombre=?']
+        valores = [nuevo_nombre]
+        if nueva_pass:
+            campos.append('password_hash=?')
+            valores.append(generate_password_hash(nueva_pass))
+        db.execute(f"UPDATE usuarios SET {', '.join(campos)} WHERE rol='admin'", valores)
+        db.commit()
+        print('[init] Admin actualizado por ADMIN_RESET '
+              f"(nombre{' y contraseña' if nueva_pass else ''}). "
+              'Ahora quitá la variable ADMIN_RESET.')
 
     db.close()
