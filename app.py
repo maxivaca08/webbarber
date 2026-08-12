@@ -184,10 +184,14 @@ def _generar_slots_del_dia(hora_ini_str, hora_fin_str,
         slot_end = current + timedelta(hours=1)
         if slot_end > end_dt:
             break
-        if lunch_s and lunch_e and current < lunch_e and slot_end > lunch_s:
-            current = lunch_e
-            continue
-        slots.append((current.strftime(fmt), slot_end.strftime(fmt)))
+        # Se saltea el slot si se superpone con el almuerzo, pero SIN mover la
+        # grilla: los horarios siguen alineados a la hora de inicio. Así, con un
+        # almuerzo no alineado a la hora (p. ej. 13:30-14:30), la tarde arranca
+        # limpia (15:00, 16:00…) en vez de quedar corrida (13:45-14:45…).
+        superpone_almuerzo = (lunch_s and lunch_e
+                              and current < lunch_e and slot_end > lunch_s)
+        if not superpone_almuerzo:
+            slots.append((current.strftime(fmt), slot_end.strftime(fmt)))
         current = slot_end
     return slots
 
